@@ -14,6 +14,7 @@ jobs:
           python-version: "3.12"
       - run: pip install pytest aiohttp pyyaml
       - run: pytest -q
+      - run: node --check xgps/app/static/app.js
       - name: Validate add-on configuration
         run: |
           python - <<'PY'

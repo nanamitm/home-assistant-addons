@@ -31,6 +31,14 @@ last received packet. Position and satellite panels are dimmed when gpsd is
 disconnected or no packet has arrived for 15 seconds. **Reconnect gpsd** closes
 the current gpsd connection and starts a new connection attempt immediately.
 
+## Satellite table
+
+The table includes GNSS, SVID, sigId, PRN, elevation, azimuth, SNR, Quality,
+prRes, Health and Used fields when gpsd provides them. Select a column heading
+to toggle ascending or descending sorting. The selected order and the GNSS and
+used-only filters are saved in the browser. Less important diagnostic columns
+are hidden on narrow mobile screens and remain available on wider displays.
+
 ## Troubleshooting
 
 If the status remains disconnected, verify gpsd's listen address, firewall and

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0
+
+- Expanded the satellite table with SVID, sigId, Quality, prRes and Health.
+- Added separate received and used satellite counts.
+- Added persistent ascending and descending sorting for every table column.
+- Added GNSS type and used-only table filters.
+- Added a compact mobile table layout that prioritizes key columns.
+
 ## 0.3.1
 
 - Fixed the UI remaining in a reconnecting/stale state after a fast manual reconnect.
