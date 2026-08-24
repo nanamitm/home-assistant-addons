@@ -1,0 +1,13 @@
+configuration:
+  gpsd_host:
+    name: gpsd host
+    description: Hostname or IP address of the gpsd server.
+  gpsd_port:
+    name: gpsd port
+    description: TCP port exposed by gpsd.
+  reconnect_interval:
+    name: Reconnect interval
+    description: Seconds to wait before reconnecting after a failure.
+  raw_json:
+    name: Raw JSON
+    description: Allow recent raw gpsd packets to be displayed for diagnostics.

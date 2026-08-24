@@ -1,0 +1,25 @@
+name: Test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pytest aiohttp pyyaml
+      - run: pytest -q
+      - name: Validate add-on configuration
+        run: |
+          python - <<'PY'
+          import yaml
+          config = yaml.safe_load(open("xgps/config.yaml"))
+          assert config["slug"] == "xgps_web"
+          assert config["ingress"] is True
+          assert set(config["arch"]) == {"amd64", "aarch64"}
+          PY

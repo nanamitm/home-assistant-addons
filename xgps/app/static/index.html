@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>xgps Web</title>
+  <link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+  <header>
+    <div>
+      <h1>xgps Web</h1>
+      <span id="status" class="status disconnected">Starting…</span>
+    </div>
+    <div class="controls">
+      <label>Grid <select id="grid"><option value="30">30°</option><option value="45">45°</option></select></label>
+      <label>Projection <select id="projection"><option value="linear">Linear</option><option value="spherical">Spherical</option></select></label>
+      <label>Units <select id="units"><option value="metric">Metric</option><option value="nautical">Nautical</option><option value="imperial">Imperial</option></select></label>
+      <label><input id="labels" type="checkbox" checked> PRN labels</label>
+      <button id="reset" type="button">Reset view</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="card sky-card">
+      <h2>Sky view</h2>
+      <svg id="sky" viewBox="-110 -110 220 220" role="img" aria-label="Satellite sky view"></svg>
+      <div id="legend" class="legend"></div>
+    </section>
+
+    <section class="card position-card">
+      <h2>Position</h2>
+      <dl id="position"></dl>
+    </section>
+
+    <section class="card table-card">
+      <h2>Satellites <span id="sat-count">0</span></h2>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>GNSS</th><th>PRN</th><th>El</th><th>Az</th><th>SNR</th><th>Used</th></tr></thead>
+          <tbody id="satellites"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="raw-card" class="card raw-card" hidden>
+      <h2>Raw JSON</h2>
+      <pre id="raw"></pre>
+    </section>
+  </main>
+  <script src="static/app.js"></script>
+</body>
+</html>

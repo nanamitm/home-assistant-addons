@@ -1,0 +1,13 @@
+configuration:
+  gpsd_host:
+    name: gpsdホスト
+    description: gpsdサーバーのホスト名またはIPアドレスです。
+  gpsd_port:
+    name: gpsdポート
+    description: gpsdが公開しているTCPポートです。
+  reconnect_interval:
+    name: 再接続間隔
+    description: 接続失敗後に再接続するまでの秒数です。
+  raw_json:
+    name: Raw JSON
+    description: 診断用に最近のgpsd JSONパケットを表示できるようにします。

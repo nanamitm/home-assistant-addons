@@ -1,0 +1,27 @@
+name: xgps Web
+version: "0.1.0"
+slug: xgps_web
+description: GPS/GNSS sky view and position information from a gpsd server
+url: https://github.com/nanamitm/home-assistant-addons/tree/main/xgps
+arch:
+  - aarch64
+  - amd64
+init: false
+startup: application
+stage: experimental
+ingress: true
+ingress_port: 8099
+ingress_stream: true
+panel_icon: mdi:satellite-variant
+panel_title: GPS Satellites
+panel_admin: false
+options:
+  gpsd_host: "192.168.1.10"
+  gpsd_port: 2947
+  reconnect_interval: 5
+  raw_json: false
+schema:
+  gpsd_host: str
+  gpsd_port: port
+  reconnect_interval: int(1,60)
+  raw_json: bool
