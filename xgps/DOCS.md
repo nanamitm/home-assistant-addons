@@ -24,6 +24,13 @@ use a trusted local network or a secured tunnel.
 Display preferences such as projection, grid, units, labels and rotation are
 stored locally in the browser.
 
+## Connection monitoring
+
+The header shows the WebSocket state, configured gpsd endpoint and time of the
+last received packet. Position and satellite panels are dimmed when gpsd is
+disconnected or no packet has arrived for 15 seconds. **Reconnect gpsd** closes
+the current gpsd connection and starts a new connection attempt immediately.
+
 ## Troubleshooting
 
 If the status remains disconnected, verify gpsd's listen address, firewall and

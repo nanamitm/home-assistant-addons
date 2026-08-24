@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0
+
+- Added separate WebSocket and gpsd connection states.
+- Added the configured gpsd endpoint and last packet time to the header.
+- Added a stale-data warning and dimmed data panels after 15 seconds without updates.
+- Localized gpsd connection states in English and Japanese.
+- Added a manual gpsd reconnect button.
+
 ## 0.2.3
 
 - Made GNSS type legend shapes neutral and added a separate signal-strength color legend.
