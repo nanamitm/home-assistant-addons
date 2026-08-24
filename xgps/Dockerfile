@@ -1,5 +1,7 @@
 FROM ghcr.io/home-assistant/base:3.22
 
+LABEL io.hass.type="app"
+
 RUN apk add --no-cache nginx python3 py3-aiohttp
 
 COPY app /opt/xgps

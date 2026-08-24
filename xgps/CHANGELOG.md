@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0
+
+- Added Japanese localization for the web interface.
+- Added add-on icon and logo.
+- Added a health endpoint and Supervisor watchdog.
+- Added DMS coordinates, local time, HDOP, error, climb and used-satellite displays.
+- Added pre-built amd64 and aarch64 images published to GHCR.
+
 ## 0.1.1
 
 - Reduced the satellite marker size in the sky view.
