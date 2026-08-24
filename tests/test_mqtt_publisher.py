@@ -103,6 +103,14 @@ def test_diagnostics_and_receiver(monkeypatch):
     }
 
 
+def test_unchanged_state_is_not_republished(monkeypatch):
+    result = publisher(monkeypatch)
+    result.update_diagnostics(0)
+    published = len(result._client.messages)
+    result.update_diagnostics(0)
+    assert len(result._client.messages) == published
+
+
 def test_discovery_groups_entities_under_one_device(monkeypatch):
     result = publisher(monkeypatch)
     client = result._client

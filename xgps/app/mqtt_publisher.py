@@ -160,6 +160,8 @@ class MqttPublisher:
 
     def update(self, values: dict[str, Any]) -> None:
         with self._lock:
+            if all(self._state.get(key) == value for key, value in values.items()):
+                return
             self._state.update(values)
             state = deepcopy(self._state)
         if self._client is not None and self._client.is_connected():
