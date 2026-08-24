@@ -24,4 +24,6 @@ jobs:
           assert config["ingress"] is True
           assert config["watchdog"] == "http://[HOST]:[PORT:8099]/health"
           assert set(config["arch"]) == {"amd64", "aarch64"}
+          assert config["services"] == ["mqtt:want"]
+          assert config["options"]["mqtt_enabled"] is False
           PY

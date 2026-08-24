@@ -20,6 +20,30 @@ use a trusted local network or a secured tunnel.
 | `gpsd_port` | `2947` | gpsd TCP port. |
 | `reconnect_interval` | `5` | Delay in seconds between connection attempts. |
 | `raw_json` | `false` | Expose recent raw packets in the UI. |
+| `mqtt_enabled` | `false` | Publish Home Assistant entities using MQTT Discovery. |
+| `device_name` | `xgps Web` | Device name shown in Home Assistant. |
+| `device_id` | `xgps_web` | Stable lowercase identifier for topics and entity unique IDs. |
+| `device_tracker` | `false` | Also publish the GPS position as a device tracker. |
+
+The optional advanced settings `discovery_prefix`, `mqtt_host`, `mqtt_port`,
+`mqtt_user` and `mqtt_password` are available in the Configuration tab. When
+`mqtt_host` is empty, the add-on automatically uses the MQTT service supplied
+by Home Assistant Supervisor.
+
+## Home Assistant entities
+
+Enable **Home Assistant entities** and restart the add-on. MQTT Discovery
+creates one **xgps Web** device containing GPSD connection, fix mode, visible
+and used satellite counts, latitude, longitude, altitude, speed, track, HDOP,
+horizontal error and last-update sensors.
+
+The optional device tracker is disabled by default because the gpsd receiver
+may represent a fixed installation rather than a moving device. Enable it only
+when its coordinates should be used as a tracked location. Disabling it again
+removes its retained Discovery configuration.
+
+Changing `device_id` creates a new set of entity unique IDs. Choose it once and
+keep it stable. MQTT credentials are not written to the add-on log.
 
 Display preferences such as projection, grid, units, labels and rotation are
 stored locally in the browser.

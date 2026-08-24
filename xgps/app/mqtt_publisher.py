@@ -184,3 +184,7 @@ class MqttPublisher:
             }
             topic = f"{self.discovery_prefix}/device_tracker/{self.device_id}/position/config"
             client.publish(topic, json.dumps(tracker_config, separators=(",", ":")), qos=1, retain=True)
+        else:
+            # Remove a retained tracker discovery config if the option was disabled.
+            topic = f"{self.discovery_prefix}/device_tracker/{self.device_id}/position/config"
+            client.publish(topic, "", qos=1, retain=True)

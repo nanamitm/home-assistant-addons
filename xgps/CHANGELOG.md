@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0
+
+- Added optional Home Assistant entity integration through MQTT Discovery.
+- Added GPSD connection, fix, satellite, position and accuracy sensors grouped under one device.
+- Added automatic Supervisor MQTT credential discovery and external broker overrides.
+- Added an opt-in GPS `device_tracker` with retained Discovery cleanup when disabled.
+- Added retained state and MQTT availability reporting with reconnect republishing.
+
 ## 0.4.0
 
 - Expanded the satellite table with SVID, sigId, Quality, prRes and Health.
