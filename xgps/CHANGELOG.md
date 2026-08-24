@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.0
+
+- Added diagnostic sensors for data age, GPSD reconnect count and receiver information.
+- Added problem binary sensors for stale data, unavailable fixes and degraded positioning quality.
+- Added receiver driver, firmware/subtype, device path, activation and baud-rate attributes.
+- Avoided duplicate MQTT publishes when diagnostic state has not changed.
+
 ## 0.6.0
 
 - Added PDOP, VDOP and GDOP to the web position panel and Home Assistant entities.

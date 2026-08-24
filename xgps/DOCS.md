@@ -43,6 +43,26 @@ for dashboards and automations: `excellent` below 1, `good` below 2,
 `moderate` below 5 and `poor` at 5 or above. The individual DOP values remain
 available when more detailed diagnostics are needed.
 
+### Diagnostics and problem sensors
+
+The device also exposes diagnostic entities suitable for dashboards and
+automations:
+
+- **Data age** reports whole seconds since the last gpsd packet. **Data stale**
+  becomes a problem after 15 seconds without data.
+- **GPSD reconnect count** counts connection attempts after the initial one for
+  the current add-on run.
+- **Receiver** reports the gpsd receiver driver or subtype and includes the
+  available device path, driver, firmware/subtype, activation time and baud
+  rate as attributes.
+- **Fix unavailable** is a problem unless gpsd reports a 2D or 3D fix.
+- **Positioning quality degraded** is a problem for `moderate` or `poor` PDOP
+  quality. `excellent` and `good` are treated as normal.
+
+Diagnostic entities are grouped under the same xgps Web device and can be used
+directly as Home Assistant automation triggers. MQTT availability remains the
+authoritative indication that the add-on itself can reach the broker.
+
 The optional device tracker is disabled by default because the gpsd receiver
 may represent a fixed installation rather than a moving device. Enable it only
 when its coordinates should be used as a tracked location. Disabling it again
