@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.0
+
+- Promoted xgps Web from experimental to stable.
+- Added a complete Home Assistant dashboard example using built-in cards only.
+- Added a PDOP gauge, DOP history, GNSS counts, diagnostics and optional map examples.
+- Added notification automation examples for connection, stale data, fix and quality problems.
+- Added CI validation for the published dashboard and automation YAML examples.
+
 ## 0.8.0
 
 - Added Home Assistant entities for used GPS, Galileo, BeiDou, QZSS and GLONASS satellite counts.

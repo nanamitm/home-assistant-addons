@@ -26,4 +26,10 @@ jobs:
           assert set(config["arch"]) == {"amd64", "aarch64"}
           assert config["services"] == ["mqtt:want"]
           assert config["options"]["mqtt_enabled"] is False
+          assert config["stage"] == "stable"
+          dashboard = yaml.safe_load(open("xgps/examples/dashboard.yaml"))
+          automations = yaml.safe_load(open("xgps/examples/automations.yaml"))
+          assert dashboard["views"][0]["cards"]
+          assert len(automations) == 4
+          assert all(item["trigger"] and item["action"] for item in automations)
           PY

@@ -1,5 +1,5 @@
 name: xgps Web
-version: "0.8.0"
+version: "1.0.0"
 slug: xgps_web
 description: GPS/GNSS sky view and position information from a gpsd server
 url: https://github.com/nanamitm/home-assistant-addons/tree/main/xgps
@@ -9,7 +9,7 @@ arch:
   - amd64
 init: false
 startup: application
-stage: experimental
+stage: stable
 ingress: true
 ingress_port: 8099
 ingress_stream: true

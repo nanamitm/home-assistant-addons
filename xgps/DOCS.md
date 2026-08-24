@@ -79,6 +79,16 @@ removes its retained Discovery configuration.
 Changing `device_id` creates a new set of entity unique IDs. Choose it once and
 keep it stable. MQTT credentials are not written to the add-on log.
 
+## Dashboard and automation examples
+
+- [Dashboard example](DASHBOARD.md) includes status, position, a PDOP gauge,
+  DOP history, GNSS-specific counts, diagnostics and an optional map.
+- [Automation examples](AUTOMATIONS.md) provide persistent notifications for
+  gpsd disconnection, stale data, unavailable fixes and degraded quality.
+
+Both examples use Home Assistant built-in features and require no custom
+cards. Their entity IDs assume the default `device_id` of `xgps_web`.
+
 Display preferences such as projection, grid, units, labels and rotation are
 stored locally in the browser.
 

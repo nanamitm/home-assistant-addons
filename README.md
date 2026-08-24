@@ -4,7 +4,8 @@ General-purpose Home Assistant add-ons maintained by nanamitm.
 
 ## Add-ons
 
-- **xgps Web** — A browser-based GPS/GNSS status viewer for a gpsd server.
+- **xgps Web** — A stable Ingress GPS/GNSS viewer with optional MQTT Discovery
+  entities, diagnostics, dashboard and automation examples.
 
 Add this repository to the Home Assistant add-on store:
 
