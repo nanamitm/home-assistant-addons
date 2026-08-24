@@ -157,7 +157,7 @@ class MqttPublisher:
             "name": self.device_name,
             "manufacturer": "nanamitm",
             "model": "xgps Web",
-            "sw_version": "0.5.1",
+            "sw_version": "0.5.2",
         }
         common = {
             "state_topic": self.state_topic,
@@ -165,7 +165,7 @@ class MqttPublisher:
             "payload_available": "online",
             "payload_not_available": "offline",
             "device": device,
-            "origin": {"name": "xgps Web", "sw_version": "0.5.1", "support_url": "https://github.com/nanamitm/home-assistant-addons"},
+            "origin": {"name": "xgps Web", "sw_version": "0.5.2", "support_url": "https://github.com/nanamitm/home-assistant-addons"},
         }
         entities = {
             "connection": ("binary_sensor", {"name": "GPSD connection", "device_class": "connectivity", "value_template": "{{ value_json.gpsd_connected }}", "payload_on": "True", "payload_off": "False"}),

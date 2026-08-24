@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.2
+
+- Fixed the web position panel to display HDOP received in gpsd SKY reports.
+- Included the latest HDOP in live WebSocket updates and initial snapshots.
+
 ## 0.5.1
 
 - Fixed the Home Assistant HDOP sensor by reading HDOP from gpsd SKY reports.
