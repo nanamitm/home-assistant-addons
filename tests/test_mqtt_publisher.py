@@ -36,9 +36,9 @@ def publisher(monkeypatch):
 def test_state_combines_sky_and_tpv(monkeypatch):
     result = publisher(monkeypatch)
     result.update_status(True)
-    result.update_sky([{"used": True}, {"used": False}, {}])
+    result.update_sky({"hdop": 0.6, "satellites": [{"used": True}, {"used": False}, {}]})
     result.update_tpv(
-        {"mode": 3, "lat": 35.1, "lon": 139.2, "altMSL": 12.5, "speed": 1.2, "track": 90, "hdop": 0.8, "eph": 2.1},
+        {"mode": 3, "lat": 35.1, "lon": 139.2, "altMSL": 12.5, "speed": 1.2, "track": 90, "eph": 2.1},
         "2026-08-24T12:00:00+00:00",
     )
 
@@ -52,6 +52,17 @@ def test_state_combines_sky_and_tpv(monkeypatch):
     assert state["satellites_used"] == 1
     assert state["latitude"] == 35.1
     assert state["altitude"] == 12.5
+    assert state["hdop"] == 0.6
+
+
+def test_dop_only_sky_packet_updates_hdop_without_resetting_counts(monkeypatch):
+    result = publisher(monkeypatch)
+    result.update_sky({"hdop": 0.7, "satellites": [{"used": True}, {"used": False}]})
+    result.update_sky({"hdop": 0.5})
+
+    assert result._state["hdop"] == 0.5
+    assert result._state["satellites_visible"] == 2
+    assert result._state["satellites_used"] == 1
 
 
 def test_discovery_groups_entities_under_one_device(monkeypatch):

@@ -73,13 +73,25 @@ class MqttPublisher:
     def update_status(self, connected: bool) -> None:
         self.update({"gpsd_connected": connected})
 
-    def update_sky(self, satellites: list[dict[str, Any]]) -> None:
-        self.update(
-            {
-                "satellites_visible": len(satellites),
-                "satellites_used": sum(bool(satellite.get("used")) for satellite in satellites),
-            }
-        )
+    def update_sky(self, sky: dict[str, Any]) -> None:
+        values: dict[str, Any] = {}
+        satellites = sky.get("satellites")
+        if isinstance(satellites, list):
+            values.update(
+                {
+                    "satellites_visible": len(satellites),
+                    "satellites_used": sum(
+                        bool(satellite.get("used"))
+                        for satellite in satellites
+                        if isinstance(satellite, dict)
+                    ),
+                }
+            )
+        hdop = sky.get("hdop")
+        if isinstance(hdop, (int, float)):
+            values["hdop"] = hdop
+        if values:
+            self.update(values)
 
     def update_tpv(self, tpv: dict[str, Any], received_at: str) -> None:
         mode = tpv.get("mode")

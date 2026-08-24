@@ -73,10 +73,11 @@ class XgpsService:
         self.last_packet_at = datetime.now(timezone.utc).isoformat()
         packet_class = packet.get("class")
         message: dict[str, Any] | None = None
-        if packet_class == "SKY" and isinstance(packet.get("satellites"), list):
-            self.satellites = [item for item in packet["satellites"] if isinstance(item, dict)]
-            message = {"type": "sky", "satellites": self.satellites, "receivedAt": self.last_packet_at}
-            self.mqtt.update_sky(self.satellites)
+        if packet_class == "SKY":
+            self.mqtt.update_sky(packet)
+            if isinstance(packet.get("satellites"), list):
+                self.satellites = [item for item in packet["satellites"] if isinstance(item, dict)]
+                message = {"type": "sky", "satellites": self.satellites, "receivedAt": self.last_packet_at}
         elif packet_class == "TPV":
             self.tpv = packet
             message = {"type": "tpv", "tpv": self.tpv, "receivedAt": self.last_packet_at}
