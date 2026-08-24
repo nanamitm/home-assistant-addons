@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.2
+
+- Matched sky-view and legend marker shapes to the original xgps-qt GNSS types.
+
 ## 0.2.1
 
 - Added persistent GNSS type filters for the sky view.
