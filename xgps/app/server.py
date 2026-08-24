@@ -6,6 +6,7 @@ import contextlib
 import json
 import logging
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,7 @@ class XgpsService:
         self.allow_raw = env_bool("RAW_JSON")
         self.satellites: list[dict[str, Any]] = []
         self.tpv: dict[str, Any] = {}
+        self.last_packet_at: str | None = None
         self.clients: set[web.WebSocketResponse] = set()
         self.gpsd = GpsdClient(
             os.getenv("GPSD_HOST", "127.0.0.1"),
@@ -52,25 +54,26 @@ class XgpsService:
                 await self.status_task
 
     async def _status_loop(self) -> None:
-        previous: tuple[bool, str] | None = None
+        previous: tuple[bool, str, str] | None = None
         while True:
-            current = (self.gpsd.connected, self.gpsd.status)
+            current = (self.gpsd.connected, self.gpsd.status_code, self.gpsd.status)
             if current != previous:
                 await self.broadcast(
-                    {"type": "status", "connected": current[0], "status": current[1]}
+                    {"type": "status", "connected": current[0], "statusCode": current[1], "detail": current[2]}
                 )
                 previous = current
             await asyncio.sleep(1)
 
     async def on_packet(self, packet: dict[str, Any], raw: str) -> None:
+        self.last_packet_at = datetime.now(timezone.utc).isoformat()
         packet_class = packet.get("class")
         message: dict[str, Any] | None = None
         if packet_class == "SKY" and isinstance(packet.get("satellites"), list):
             self.satellites = [item for item in packet["satellites"] if isinstance(item, dict)]
-            message = {"type": "sky", "satellites": self.satellites}
+            message = {"type": "sky", "satellites": self.satellites, "receivedAt": self.last_packet_at}
         elif packet_class == "TPV":
             self.tpv = packet
-            message = {"type": "tpv", "tpv": self.tpv}
+            message = {"type": "tpv", "tpv": self.tpv, "receivedAt": self.last_packet_at}
         if message is not None:
             await self.broadcast(message)
         if self.allow_raw:
@@ -87,7 +90,7 @@ class XgpsService:
         self.clients.difference_update(stale)
 
     def snapshot(self) -> dict[str, Any]:
-        return {"type":"snapshot", "connected":self.gpsd.connected, "status":self.gpsd.status, "satellites":self.satellites, "tpv":self.tpv, "rawEnabled":self.allow_raw, "raw":list(self.gpsd.raw_lines) if self.allow_raw else []}
+        return {"type":"snapshot", "connected":self.gpsd.connected, "statusCode":self.gpsd.status_code, "detail":self.gpsd.status, "gpsdHost":self.gpsd.host, "gpsdPort":self.gpsd.port, "lastPacketAt":self.last_packet_at, "satellites":self.satellites, "tpv":self.tpv, "rawEnabled":self.allow_raw, "raw":list(self.gpsd.raw_lines) if self.allow_raw else []}
 
 
 service = XgpsService()

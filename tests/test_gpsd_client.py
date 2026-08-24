@@ -46,3 +46,4 @@ async def _exercise_client():
     assert b'"enable":true' in watch.result()
     assert received[0][0]["class"] == "SKY"
     assert json.loads(received[0][1])["satellites"][0]["PRN"] == 1
+    assert client.status_code in {"connected", "connection_closed"}
