@@ -12,6 +12,18 @@ from typing import Any
 import paho.mqtt.client as mqtt
 
 LOGGER = logging.getLogger(__name__)
+DOP_FIELDS = ("hdop", "pdop", "vdop", "gdop")
+
+
+def positioning_quality(pdop: float | int) -> str:
+    """Classify PDOP using simple, stable thresholds for automation use."""
+    if pdop < 1:
+        return "excellent"
+    if pdop < 2:
+        return "good"
+    if pdop < 5:
+        return "moderate"
+    return "poor"
 
 
 def env_bool(name: str, default: bool = False) -> bool:
@@ -87,9 +99,12 @@ class MqttPublisher:
                     ),
                 }
             )
-        hdop = sky.get("hdop")
-        if isinstance(hdop, (int, float)):
-            values["hdop"] = hdop
+        for field in DOP_FIELDS:
+            value = sky.get(field)
+            if isinstance(value, (int, float)):
+                values[field] = value
+        if "pdop" in values:
+            values["positioning_quality"] = positioning_quality(values["pdop"])
         if values:
             self.update(values)
 
@@ -178,6 +193,10 @@ class MqttPublisher:
             "speed": ("sensor", {"name": "Speed", "value_template": "{{ value_json.speed | default(none) }}", "device_class": "speed", "unit_of_measurement": "m/s", "state_class": "measurement"}),
             "track": ("sensor", {"name": "Track", "value_template": "{{ value_json.track | default(none) }}", "unit_of_measurement": "°", "icon": "mdi:compass"}),
             "hdop": ("sensor", {"name": "HDOP", "value_template": "{{ value_json.hdop | default(none) }}", "state_class": "measurement", "icon": "mdi:map-marker-radius"}),
+            "pdop": ("sensor", {"name": "PDOP", "value_template": "{{ value_json.pdop | default(none) }}", "state_class": "measurement", "icon": "mdi:crosshairs-question"}),
+            "vdop": ("sensor", {"name": "VDOP", "value_template": "{{ value_json.vdop | default(none) }}", "state_class": "measurement", "icon": "mdi:arrow-up-down"}),
+            "gdop": ("sensor", {"name": "GDOP", "value_template": "{{ value_json.gdop | default(none) }}", "state_class": "measurement", "icon": "mdi:target"}),
+            "positioning_quality": ("sensor", {"name": "Positioning quality", "value_template": "{{ value_json.positioning_quality | default(none) }}", "device_class": "enum", "options": ["excellent", "good", "moderate", "poor"], "icon": "mdi:signal"}),
             "horizontal_error": ("sensor", {"name": "Horizontal error", "value_template": "{{ value_json.horizontal_error | default(none) }}", "device_class": "distance", "unit_of_measurement": "m", "state_class": "measurement"}),
             "last_update": ("sensor", {"name": "Last update", "value_template": "{{ value_json.last_update | default(none) }}", "device_class": "timestamp"}),
         }

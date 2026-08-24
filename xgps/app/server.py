@@ -12,7 +12,7 @@ from typing import Any
 
 from aiohttp import WSMsgType, web
 from gpsd_client import GpsdClient
-from mqtt_publisher import MqttPublisher
+from mqtt_publisher import DOP_FIELDS, MqttPublisher, positioning_quality
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
 LOGGER = logging.getLogger("xgps")
@@ -28,7 +28,8 @@ class XgpsService:
         self.allow_raw = env_bool("RAW_JSON")
         self.satellites: list[dict[str, Any]] = []
         self.tpv: dict[str, Any] = {}
-        self.hdop: float | int | None = None
+        self.dop: dict[str, float | int | str | None] = {field: None for field in DOP_FIELDS}
+        self.dop["positioningQuality"] = None
         self.last_packet_at: str | None = None
         self.clients: set[web.WebSocketResponse] = set()
         self.mqtt = MqttPublisher()
@@ -76,14 +77,17 @@ class XgpsService:
         message: dict[str, Any] | None = None
         if packet_class == "SKY":
             self.mqtt.update_sky(packet)
-            if isinstance(packet.get("hdop"), (int, float)):
-                self.hdop = packet["hdop"]
+            for field in DOP_FIELDS:
+                if isinstance(packet.get(field), (int, float)):
+                    self.dop[field] = packet[field]
+            if isinstance(self.dop["pdop"], (int, float)):
+                self.dop["positioningQuality"] = positioning_quality(self.dop["pdop"])
             if isinstance(packet.get("satellites"), list):
                 self.satellites = [item for item in packet["satellites"] if isinstance(item, dict)]
             message = {
                 "type": "sky",
                 "satellites": self.satellites,
-                "hdop": self.hdop,
+                **self.dop,
                 "receivedAt": self.last_packet_at,
             }
         elif packet_class == "TPV":
@@ -106,7 +110,7 @@ class XgpsService:
         self.clients.difference_update(stale)
 
     def snapshot(self) -> dict[str, Any]:
-        return {"type":"snapshot", "connected":self.gpsd.connected, "statusCode":self.gpsd.status_code, "detail":self.gpsd.status, "gpsdHost":self.gpsd.host, "gpsdPort":self.gpsd.port, "lastPacketAt":self.last_packet_at, "satellites":self.satellites, "tpv":self.tpv, "hdop":self.hdop, "rawEnabled":self.allow_raw, "raw":list(self.gpsd.raw_lines) if self.allow_raw else []}
+        return {"type":"snapshot", "connected":self.gpsd.connected, "statusCode":self.gpsd.status_code, "detail":self.gpsd.status, "gpsdHost":self.gpsd.host, "gpsdPort":self.gpsd.port, "lastPacketAt":self.last_packet_at, "satellites":self.satellites, "tpv":self.tpv, **self.dop, "rawEnabled":self.allow_raw, "raw":list(self.gpsd.raw_lines) if self.allow_raw else []}
 
 
 service = XgpsService()
