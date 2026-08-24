@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.3
+
+- Made GNSS type legend shapes neutral and added a separate signal-strength color legend.
+
 ## 0.2.2
 
 - Matched sky-view and legend marker shapes to the original xgps-qt GNSS types.
