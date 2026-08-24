@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.1
+
+- Fixed the Home Assistant HDOP sensor by reading HDOP from gpsd SKY reports.
+- Handled DOP-only SKY reports without resetting the retained satellite counts.
+
 ## 0.5.0
 
 - Added optional Home Assistant entity integration through MQTT Discovery.
