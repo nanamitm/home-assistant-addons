@@ -11,6 +11,12 @@
     <div>
       <h1>xgps Web</h1>
       <span id="status" class="status disconnected" data-i18n="starting">Starting…</span>
+      <div class="connection-meta">
+        <span><span data-i18n="webConnection">Web</span>: <b id="web-status">—</b></span>
+        <span><span data-i18n="endpoint">Endpoint</span>: <b id="endpoint">—</b></span>
+        <span><span data-i18n="lastUpdate">Last update</span>: <b id="last-update">—</b></span>
+        <span id="stale-warning" class="stale-warning" hidden data-i18n="staleData">Data is stale</span>
+      </div>
     </div>
     <div class="controls">
       <label><span data-i18n="grid">Grid</span> <select id="grid"><option value="30">30°</option><option value="45">45°</option></select></label>
