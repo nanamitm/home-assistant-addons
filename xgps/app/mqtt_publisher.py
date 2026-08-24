@@ -13,6 +13,14 @@ import paho.mqtt.client as mqtt
 
 LOGGER = logging.getLogger(__name__)
 DOP_FIELDS = ("hdop", "pdop", "vdop", "gdop")
+SYSTEM_COUNTS = {
+    "gps_satellites_used": (0, True),
+    "sbas_satellites_visible": (1, False),
+    "galileo_satellites_used": (2, True),
+    "beidou_satellites_used": (3, True),
+    "qzss_satellites_used": (5, True),
+    "glonass_satellites_used": (6, True),
+}
 
 
 def positioning_quality(pdop: float | int) -> str:
@@ -115,16 +123,21 @@ class MqttPublisher:
         values: dict[str, Any] = {}
         satellites = sky.get("satellites")
         if isinstance(satellites, list):
+            valid_satellites = [satellite for satellite in satellites if isinstance(satellite, dict)]
             values.update(
                 {
-                    "satellites_visible": len(satellites),
+                    "satellites_visible": len(valid_satellites),
                     "satellites_used": sum(
                         bool(satellite.get("used"))
-                        for satellite in satellites
-                        if isinstance(satellite, dict)
+                        for satellite in valid_satellites
                     ),
                 }
             )
+            for state_key, (gnssid, used_only) in SYSTEM_COUNTS.items():
+                values[state_key] = sum(
+                    satellite.get("gnssid") == gnssid and (not used_only or bool(satellite.get("used")))
+                    for satellite in valid_satellites
+                )
         for field in DOP_FIELDS:
             value = sky.get(field)
             if isinstance(value, (int, float)):
@@ -220,6 +233,12 @@ class MqttPublisher:
             "fix_mode": ("sensor", {"name": "Fix mode", "value_template": "{{ value_json.fix_mode }}", "icon": "mdi:crosshairs-gps"}),
             "satellites_visible": ("sensor", {"name": "Satellites visible", "value_template": "{{ value_json.satellites_visible }}", "state_class": "measurement", "icon": "mdi:satellite-variant"}),
             "satellites_used": ("sensor", {"name": "Satellites used", "value_template": "{{ value_json.satellites_used }}", "state_class": "measurement", "icon": "mdi:satellite-uplink"}),
+            "gps_satellites_used": ("sensor", {"name": "GPS satellites used", "value_template": "{{ value_json.gps_satellites_used }}", "state_class": "measurement", "icon": "mdi:satellite-uplink"}),
+            "sbas_satellites_visible": ("sensor", {"name": "SBAS satellites visible", "value_template": "{{ value_json.sbas_satellites_visible }}", "state_class": "measurement", "icon": "mdi:satellite-variant"}),
+            "galileo_satellites_used": ("sensor", {"name": "Galileo satellites used", "value_template": "{{ value_json.galileo_satellites_used }}", "state_class": "measurement", "icon": "mdi:satellite-uplink"}),
+            "beidou_satellites_used": ("sensor", {"name": "BeiDou satellites used", "value_template": "{{ value_json.beidou_satellites_used }}", "state_class": "measurement", "icon": "mdi:satellite-uplink"}),
+            "qzss_satellites_used": ("sensor", {"name": "QZSS satellites used", "value_template": "{{ value_json.qzss_satellites_used }}", "state_class": "measurement", "icon": "mdi:satellite-uplink"}),
+            "glonass_satellites_used": ("sensor", {"name": "GLONASS satellites used", "value_template": "{{ value_json.glonass_satellites_used }}", "state_class": "measurement", "icon": "mdi:satellite-uplink"}),
             "latitude": ("sensor", {"name": "Latitude", "value_template": "{{ value_json.latitude | default(none) }}", "unit_of_measurement": "°", "icon": "mdi:latitude"}),
             "longitude": ("sensor", {"name": "Longitude", "value_template": "{{ value_json.longitude | default(none) }}", "unit_of_measurement": "°", "icon": "mdi:longitude"}),
             "altitude": ("sensor", {"name": "Altitude", "value_template": "{{ value_json.altitude | default(none) }}", "device_class": "distance", "unit_of_measurement": "m", "state_class": "measurement"}),
