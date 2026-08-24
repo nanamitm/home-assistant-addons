@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1
+
+- Added persistent GNSS type filters for the sky view.
+
 ## 0.2.0
 
 - Added Japanese localization for the web interface.
