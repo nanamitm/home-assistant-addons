@@ -12,6 +12,7 @@ stage: experimental
 ingress: true
 ingress_port: 8099
 ingress_stream: true
+watchdog: http://[HOST]:[PORT:8099]/health
 panel_icon: mdi:satellite-variant
 panel_title: GPS Satellites
 panel_admin: false

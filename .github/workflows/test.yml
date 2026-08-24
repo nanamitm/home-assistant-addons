@@ -21,5 +21,6 @@ jobs:
           config = yaml.safe_load(open("xgps/config.yaml"))
           assert config["slug"] == "xgps_web"
           assert config["ingress"] is True
+          assert config["watchdog"] == "http://[HOST]:[PORT:8099]/health"
           assert set(config["arch"]) == {"amd64", "aarch64"}
           PY

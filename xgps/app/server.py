@@ -97,6 +97,17 @@ async def index(_request: web.Request) -> web.FileResponse:
     return web.FileResponse(STATIC_DIR / "index.html")
 
 
+async def health(_request: web.Request) -> web.Response:
+    """Report process health without treating a remote gpsd outage as fatal."""
+    return web.json_response(
+        {
+            "status": "ok",
+            "gpsd_connected": service.gpsd.connected,
+            "gpsd_status": service.gpsd.status,
+        }
+    )
+
+
 async def websocket(request: web.Request) -> web.WebSocketResponse:
     ws = web.WebSocketResponse(heartbeat=30)
     await ws.prepare(request)
@@ -115,6 +126,7 @@ async def websocket(request: web.Request) -> web.WebSocketResponse:
 def create_app() -> web.Application:
     app = web.Application()
     app.router.add_get("/", index)
+    app.router.add_get("/health", health)
     app.router.add_get("/ws", websocket)
     app.router.add_static("/static", STATIC_DIR, append_version=True)
     app.on_startup.append(service.start)
