@@ -59,12 +59,13 @@ def test_discovery_groups_entities_under_one_device(monkeypatch):
     client = result._client
     result._publish_discovery(client)
 
-    configs = [(topic, json.loads(payload)) for topic, payload, _, _ in client.messages]
+    configs = [(topic, json.loads(payload)) for topic, payload, _, _ in client.messages if payload]
     assert len(configs) == 12
     connection = next(config for topic, config in configs if "/binary_sensor/" in topic)
     assert connection["unique_id"] == "roof_gps_connection"
     assert connection["device"]["identifiers"] == ["roof_gps"]
     assert all(config["availability_topic"] == "xgps_web/roof_gps/availability" for _, config in configs)
+    assert any(topic.endswith("/device_tracker/roof_gps/position/config") and payload == "" for topic, payload, _, _ in client.messages)
 
 
 def test_tracker_is_opt_in(monkeypatch):
