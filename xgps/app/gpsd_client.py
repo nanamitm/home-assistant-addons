@@ -21,6 +21,7 @@ class GpsdClient:
         self.connected = False
         self.status = "Starting"
         self.status_code = "starting"
+        self.connection_generation = 0
         self.raw_lines: deque[str] = deque(maxlen=500)
         self._stopping = asyncio.Event()
         self._reconnect = asyncio.Event()
@@ -29,6 +30,7 @@ class GpsdClient:
     async def run(self) -> None:
         while not self._stopping.is_set():
             try:
+                self.connection_generation += 1
                 self.status = f"Connecting to {self.host}:{self.port}"
                 self.status_code = "connecting"
                 reader, self._writer = await asyncio.open_connection(self.host, self.port)

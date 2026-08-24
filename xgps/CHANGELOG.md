@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1
+
+- Fixed the UI remaining in a reconnecting/stale state after a fast manual reconnect.
+- Disabled the reconnect button while a reconnect is already in progress.
+
 ## 0.3.0
 
 - Added separate WebSocket and gpsd connection states.

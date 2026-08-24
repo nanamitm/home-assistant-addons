@@ -54,9 +54,9 @@ class XgpsService:
                 await self.status_task
 
     async def _status_loop(self) -> None:
-        previous: tuple[bool, str, str] | None = None
+        previous: tuple[bool, str, str, int] | None = None
         while True:
-            current = (self.gpsd.connected, self.gpsd.status_code, self.gpsd.status)
+            current = (self.gpsd.connected, self.gpsd.status_code, self.gpsd.status, self.gpsd.connection_generation)
             if current != previous:
                 await self.broadcast(
                     {"type": "status", "connected": current[0], "statusCode": current[1], "detail": current[2]}
@@ -125,6 +125,14 @@ async def websocket(request: web.Request) -> web.WebSocketResponse:
                     continue
                 if command.get("action") == "reconnect":
                     await service.gpsd.reconnect()
+                    await ws.send_json(
+                        {
+                            "type": "status",
+                            "connected": False,
+                            "statusCode": "reconnecting",
+                            "detail": service.gpsd.status,
+                        }
+                    )
             if message.type == WSMsgType.ERROR:
                 LOGGER.debug("WebSocket error: %s", ws.exception())
                 break
