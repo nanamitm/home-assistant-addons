@@ -55,6 +55,16 @@
 
     <section class="card table-card">
       <h2><span data-i18n="satellites">Satellites</span> <span id="sat-count">0</span> <small>· <span data-i18n="usedCountShort">Used</span> <span id="used-count">0</span></small></h2>
+      <div class="table-controls">
+        <label><span data-i18n="systemFilter">System</span>
+          <select id="table-system">
+            <option value="all" data-i18n="allSystems">All systems</option>
+            <option value="0">GPS</option><option value="1">SBAS</option><option value="2">Galileo</option><option value="3">BeiDou</option>
+            <option value="4">IMES</option><option value="5">QZSS</option><option value="6">GLONASS</option><option value="7">IRNSS</option>
+          </select>
+        </label>
+        <label><input id="used-only" type="checkbox"> <span data-i18n="usedOnly">Used only</span></label>
+      </div>
       <div class="table-scroll">
         <table>
           <thead><tr><th data-sort="gnss">GNSS</th><th data-sort="svid">SVID</th><th data-sort="sigid">sigId</th><th data-sort="prn">PRN</th><th data-sort="el" data-i18n="elevation">El</th><th data-sort="az" data-i18n="azimuth">Az</th><th data-sort="ss">SNR</th><th data-sort="qual">Quality</th><th data-sort="prRes">prRes</th><th data-sort="health">Health</th><th data-sort="used" data-i18n="used">Used</th></tr></thead>
