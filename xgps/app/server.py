@@ -118,6 +118,13 @@ async def websocket(request: web.Request) -> web.WebSocketResponse:
     await ws.send_json(service.snapshot())
     try:
         async for message in ws:
+            if message.type == WSMsgType.TEXT:
+                try:
+                    command = json.loads(message.data)
+                except json.JSONDecodeError:
+                    continue
+                if command.get("action") == "reconnect":
+                    await service.gpsd.reconnect()
             if message.type == WSMsgType.ERROR:
                 LOGGER.debug("WebSocket error: %s", ws.exception())
                 break

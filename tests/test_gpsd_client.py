@@ -11,6 +11,19 @@ def test_gpsd_watch_and_packet_delivery():
     asyncio.run(_exercise_client())
 
 
+def test_manual_reconnect_sets_state():
+    async def exercise():
+        async def handler(_packet, _raw):
+            pass
+
+        client = GpsdClient("gpsd.local", 2947, 5, handler)
+        await client.reconnect()
+        assert client.status_code == "reconnecting"
+        assert client._reconnect.is_set()
+
+    asyncio.run(exercise())
+
+
 async def _exercise_client():
     received = []
     watch = asyncio.Future()

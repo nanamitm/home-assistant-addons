@@ -23,6 +23,7 @@ class GpsdClient:
         self.status_code = "starting"
         self.raw_lines: deque[str] = deque(maxlen=500)
         self._stopping = asyncio.Event()
+        self._reconnect = asyncio.Event()
         self._writer: asyncio.StreamWriter | None = None
 
     async def run(self) -> None:
@@ -53,12 +54,22 @@ class GpsdClient:
                     self._writer = None
             if not self._stopping.is_set():
                 try:
-                    await asyncio.wait_for(self._stopping.wait(), timeout=self.reconnect_interval)
+                    await asyncio.wait_for(self._reconnect.wait(), timeout=self.reconnect_interval)
                 except asyncio.TimeoutError:
                     pass
+                self._reconnect.clear()
 
     async def stop(self) -> None:
         self._stopping.set()
+        self._reconnect.set()
+        if self._writer is not None:
+            self._writer.close()
+
+    async def reconnect(self) -> None:
+        """Close the active socket and skip any automatic reconnect delay."""
+        self.status = f"Reconnecting to {self.host}:{self.port}"
+        self.status_code = "reconnecting"
+        self._reconnect.set()
         if self._writer is not None:
             self._writer.close()
 
