@@ -1,0 +1,80 @@
+- id: xgps_gpsd_disconnected
+  alias: xgps Web - GPSD disconnected
+  description: Notify when gpsd is disconnected or the xgps MQTT device becomes unavailable.
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.xgps_web_gpsd_connection
+      to: "off"
+      for: "00:00:30"
+    - platform: state
+      entity_id: binary_sensor.xgps_web_gpsd_connection
+      to: unavailable
+      for: "00:00:30"
+  condition: []
+  action:
+    - service: persistent_notification.create
+      data:
+        notification_id: xgps_gpsd_disconnected
+        title: GPSD connection problem
+        message: >-
+          xgps Web cannot receive gpsd data. Current connection state:
+          {{ states('binary_sensor.xgps_web_gpsd_connection') }}.
+  mode: single
+
+- id: xgps_data_stale
+  alias: xgps Web - GPS data stale
+  description: Notify when gpsd packets have stopped for more than 15 seconds.
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.xgps_web_data_stale
+      to: "on"
+      for: "00:00:15"
+  condition: []
+  action:
+    - service: persistent_notification.create
+      data:
+        notification_id: xgps_data_stale
+        title: GPS data stopped
+        message: >-
+          No fresh gpsd packet is available. Data age:
+          {{ states('sensor.xgps_web_data_age') }} seconds.
+  mode: single
+
+- id: xgps_fix_unavailable
+  alias: xgps Web - Fix unavailable
+  description: Notify when neither a 2D nor a 3D fix is available for two minutes.
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.xgps_web_fix_unavailable
+      to: "on"
+      for: "00:02:00"
+  condition: []
+  action:
+    - service: persistent_notification.create
+      data:
+        notification_id: xgps_fix_unavailable
+        title: GPS fix unavailable
+        message: >-
+          The receiver has no 2D or 3D fix. Visible satellites:
+          {{ states('sensor.xgps_web_satellites_visible') }}.
+  mode: single
+
+- id: xgps_positioning_quality_degraded
+  alias: xgps Web - Positioning quality degraded
+  description: Notify when PDOP quality remains moderate or poor for five minutes.
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.xgps_web_positioning_quality_degraded
+      to: "on"
+      for: "00:05:00"
+  condition: []
+  action:
+    - service: persistent_notification.create
+      data:
+        notification_id: xgps_positioning_quality_degraded
+        title: GPS positioning quality degraded
+        message: >-
+          Positioning quality is
+          {{ states('sensor.xgps_web_positioning_quality') }} with PDOP
+          {{ states('sensor.xgps_web_pdop') }}.
+  mode: single
