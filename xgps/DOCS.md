@@ -35,7 +35,13 @@ by Home Assistant Supervisor.
 Enable **Home Assistant entities** and restart the add-on. MQTT Discovery
 creates one **xgps Web** device containing GPSD connection, fix mode, visible
 and used satellite counts, latitude, longitude, altitude, speed, track, HDOP,
-horizontal error and last-update sensors.
+PDOP, VDOP, GDOP, positioning quality, horizontal error and last-update
+sensors.
+
+Positioning quality is derived from PDOP and is intended as a compact status
+for dashboards and automations: `excellent` below 1, `good` below 2,
+`moderate` below 5 and `poor` at 5 or above. The individual DOP values remain
+available when more detailed diagnostics are needed.
 
 The optional device tracker is disabled by default because the gpsd receiver
 may represent a fixed installation rather than a moving device. Enable it only

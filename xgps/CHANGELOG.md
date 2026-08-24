@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0
+
+- Added PDOP, VDOP and GDOP to the web position panel and Home Assistant entities.
+- Added a positioning-quality entity and localized web display based on PDOP.
+- Classified quality as excellent below 1, good below 2, moderate below 5 and poor otherwise.
+
 ## 0.5.2
 
 - Fixed the web position panel to display HDOP received in gpsd SKY reports.
