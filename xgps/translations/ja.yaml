@@ -11,3 +11,30 @@ configuration:
   raw_json:
     name: Raw JSON
     description: 診断用に最近のgpsd JSONパケットを表示できるようにします。
+  mqtt_enabled:
+    name: Home Assistantエンティティ
+    description: MQTT Discoveryを使用して測位情報をHome Assistantへ公開します。
+  device_name:
+    name: デバイス名
+    description: Home Assistantに表示するデバイス名です。
+  device_id:
+    name: デバイスID
+    description: MQTTトピックとエンティティ固有IDに使用する識別子です。
+  device_tracker:
+    name: デバイストラッカー
+    description: 現在位置をdevice_trackerとして追加公開します。
+  discovery_prefix:
+    name: Discoveryプレフィックス
+    description: Home Assistant MQTT Discoveryのプレフィックスです。
+  mqtt_host:
+    name: MQTTホスト
+    description: 外部MQTTブローカーを使用する場合のホストです。空欄ではSupervisorのMQTTサービスを使用します。
+  mqtt_port:
+    name: MQTTポート
+    description: 外部MQTTブローカーのポートです。
+  mqtt_user:
+    name: MQTTユーザー名
+    description: 外部MQTTブローカーのユーザー名です。
+  mqtt_password:
+    name: MQTTパスワード
+    description: 外部MQTTブローカーのパスワードです。

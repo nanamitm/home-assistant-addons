@@ -11,3 +11,30 @@ configuration:
   raw_json:
     name: Raw JSON
     description: Allow recent raw gpsd packets to be displayed for diagnostics.
+  mqtt_enabled:
+    name: Home Assistant entities
+    description: Publish positioning data to Home Assistant using MQTT Discovery.
+  device_name:
+    name: Device name
+    description: Device name shown in Home Assistant.
+  device_id:
+    name: Device ID
+    description: Identifier used in MQTT topics and entity unique IDs.
+  device_tracker:
+    name: Device tracker
+    description: Also publish the current position as a device_tracker.
+  discovery_prefix:
+    name: Discovery prefix
+    description: Home Assistant MQTT Discovery prefix.
+  mqtt_host:
+    name: MQTT host
+    description: External MQTT broker host. Leave empty to use the Supervisor MQTT service.
+  mqtt_port:
+    name: MQTT port
+    description: External MQTT broker port.
+  mqtt_user:
+    name: MQTT username
+    description: External MQTT broker username.
+  mqtt_password:
+    name: MQTT password
+    description: External MQTT broker password.

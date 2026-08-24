@@ -17,13 +17,28 @@ watchdog: http://[HOST]:[PORT:8099]/health
 panel_icon: mdi:satellite-variant
 panel_title: GPS Satellites
 panel_admin: false
+services:
+  - mqtt:want
 options:
   gpsd_host: "192.168.1.10"
   gpsd_port: 2947
   reconnect_interval: 5
   raw_json: false
+  mqtt_enabled: false
+  device_name: "xgps Web"
+  device_id: "xgps_web"
+  device_tracker: false
 schema:
   gpsd_host: str
   gpsd_port: port
   reconnect_interval: int(1,60)
   raw_json: bool
+  mqtt_enabled: bool
+  device_name: str
+  device_id: match(^[a-z0-9_]+$)
+  device_tracker: bool
+  discovery_prefix: str?
+  mqtt_host: str?
+  mqtt_port: port?
+  mqtt_user: str?
+  mqtt_password: password?
