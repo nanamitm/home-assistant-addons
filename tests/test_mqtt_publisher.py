@@ -35,7 +35,7 @@ def publisher(monkeypatch):
 
 def test_state_combines_sky_and_tpv(monkeypatch):
     result = publisher(monkeypatch)
-    result.update_status(True)
+    result.update_status(True, 3)
     result.update_sky({"hdop": 0.6, "pdop": 1.2, "vdop": 1.0, "gdop": 1.4, "satellites": [{"used": True}, {"used": False}, {}]})
     result.update_tpv(
         {"mode": 3, "lat": 35.1, "lon": 139.2, "altMSL": 12.5, "speed": 1.2, "track": 90, "eph": 2.1},
@@ -47,6 +47,7 @@ def test_state_combines_sky_and_tpv(monkeypatch):
     assert topic == "xgps_web/roof_gps/state"
     assert (qos, retained) == (1, True)
     assert state["gpsd_connected"] is True
+    assert state["reconnect_count"] == 2
     assert state["fix_mode"] == "3D"
     assert state["satellites_visible"] == 3
     assert state["satellites_used"] == 1
@@ -57,6 +58,8 @@ def test_state_combines_sky_and_tpv(monkeypatch):
     assert state["vdop"] == 1.0
     assert state["gdop"] == 1.4
     assert state["positioning_quality"] == "good"
+    assert state["quality_degraded"] is False
+    assert state["fix_unavailable"] is False
 
 
 def test_dop_only_sky_packet_updates_hdop_without_resetting_counts(monkeypatch):
@@ -75,6 +78,29 @@ def test_positioning_quality_thresholds(monkeypatch):
     for pdop, quality in expected:
         result.update_sky({"pdop": pdop})
         assert result._state["positioning_quality"] == quality
+        assert result._state["quality_degraded"] is (quality in {"moderate", "poor"})
+
+
+def test_diagnostics_and_receiver(monkeypatch):
+    result = publisher(monkeypatch)
+    result.update_diagnostics(None)
+    assert result._state["data_stale"] is True
+    result.update_diagnostics(15)
+    assert result._state["data_stale"] is False
+    result.update_diagnostics(16)
+    assert result._state["data_age"] == 16
+    assert result._state["data_stale"] is True
+
+    result.update_device(
+        {"path": "/dev/ttyACM0", "driver": "u-blox", "subtype": "ZED-F9P", "bps": 115200, "ignored": [1]}
+    )
+    assert result._state["receiver_name"] == "ZED-F9P"
+    assert result._state["receiver"] == {
+        "path": "/dev/ttyACM0",
+        "driver": "u-blox",
+        "subtype": "ZED-F9P",
+        "bps": 115200,
+    }
 
 
 def test_discovery_groups_entities_under_one_device(monkeypatch):
@@ -83,11 +109,14 @@ def test_discovery_groups_entities_under_one_device(monkeypatch):
     result._publish_discovery(client)
 
     configs = [(topic, json.loads(payload)) for topic, payload, _, _ in client.messages if payload]
-    assert len(configs) == 16
+    assert len(configs) == 22
     connection = next(config for topic, config in configs if "/binary_sensor/" in topic)
     assert connection["unique_id"] == "roof_gps_connection"
     assert connection["device"]["identifiers"] == ["roof_gps"]
     assert all(config["availability_topic"] == "xgps_web/roof_gps/availability" for _, config in configs)
+    receiver = next(config for topic, config in configs if topic.endswith("/receiver/config"))
+    assert receiver["entity_category"] == "diagnostic"
+    assert "json_attributes_template" in receiver
     assert any(topic.endswith("/device_tracker/roof_gps/position/config") and payload == "" for topic, payload, _, _ in client.messages)
 
 

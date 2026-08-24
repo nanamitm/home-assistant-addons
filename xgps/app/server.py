@@ -31,6 +31,7 @@ class XgpsService:
         self.dop: dict[str, float | int | str | None] = {field: None for field in DOP_FIELDS}
         self.dop["positioningQuality"] = None
         self.last_packet_at: str | None = None
+        self.last_packet_monotonic: float | None = None
         self.clients: set[web.WebSocketResponse] = set()
         self.mqtt = MqttPublisher()
         self.gpsd = GpsdClient(
@@ -64,15 +65,20 @@ class XgpsService:
         while True:
             current = (self.gpsd.connected, self.gpsd.status_code, self.gpsd.status, self.gpsd.connection_generation)
             if current != previous:
-                self.mqtt.update_status(current[0])
+                self.mqtt.update_status(current[0], current[3])
                 await self.broadcast(
                     {"type": "status", "connected": current[0], "statusCode": current[1], "detail": current[2]}
                 )
                 previous = current
+            data_age = None
+            if self.last_packet_monotonic is not None:
+                data_age = max(0, int(asyncio.get_running_loop().time() - self.last_packet_monotonic))
+            self.mqtt.update_diagnostics(data_age)
             await asyncio.sleep(1)
 
     async def on_packet(self, packet: dict[str, Any], raw: str) -> None:
         self.last_packet_at = datetime.now(timezone.utc).isoformat()
+        self.last_packet_monotonic = asyncio.get_running_loop().time()
         packet_class = packet.get("class")
         message: dict[str, Any] | None = None
         if packet_class == "SKY":
@@ -94,6 +100,12 @@ class XgpsService:
             self.tpv = packet
             message = {"type": "tpv", "tpv": self.tpv, "receivedAt": self.last_packet_at}
             self.mqtt.update_tpv(self.tpv, self.last_packet_at)
+        elif packet_class == "DEVICE":
+            self.mqtt.update_device(packet)
+        elif packet_class == "DEVICES" and isinstance(packet.get("devices"), list):
+            device = next((item for item in packet["devices"] if isinstance(item, dict)), None)
+            if device is not None:
+                self.mqtt.update_device(device)
         if message is not None:
             await self.broadcast(message)
         if self.allow_raw:

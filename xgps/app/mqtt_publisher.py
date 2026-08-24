@@ -50,8 +50,11 @@ class MqttPublisher:
         self._state: dict[str, Any] = {
             "gpsd_connected": False,
             "fix_mode": "No fix",
+            "fix_unavailable": True,
+            "data_stale": True,
             "satellites_visible": 0,
             "satellites_used": 0,
+            "reconnect_count": 0,
         }
         self._lock = threading.Lock()
         self._client: mqtt.Client | None = None
@@ -82,8 +85,31 @@ class MqttPublisher:
         self._client.loop_stop()
         self._client = None
 
-    def update_status(self, connected: bool) -> None:
-        self.update({"gpsd_connected": connected})
+    def update_status(self, connected: bool, connection_generation: int) -> None:
+        self.update(
+            {
+                "gpsd_connected": connected,
+                "reconnect_count": max(connection_generation - 1, 0),
+            }
+        )
+
+    def update_diagnostics(self, data_age: int | None) -> None:
+        self.update(
+            {
+                "data_age": data_age,
+                "data_stale": data_age is None or data_age > 15,
+            }
+        )
+
+    def update_device(self, device: dict[str, Any]) -> None:
+        details = {
+            key: device[key]
+            for key in ("path", "driver", "subtype", "subtype1", "activated", "bps")
+            if isinstance(device.get(key), (str, int, float))
+        }
+        name = details.get("subtype") or details.get("driver") or details.get("path")
+        if name:
+            self.update({"receiver_name": name, "receiver": details})
 
     def update_sky(self, sky: dict[str, Any]) -> None:
         values: dict[str, Any] = {}
@@ -105,6 +131,7 @@ class MqttPublisher:
                 values[field] = value
         if "pdop" in values:
             values["positioning_quality"] = positioning_quality(values["pdop"])
+            values["quality_degraded"] = values["positioning_quality"] in {"moderate", "poor"}
         if values:
             self.update(values)
 
@@ -112,6 +139,7 @@ class MqttPublisher:
         mode = tpv.get("mode")
         values: dict[str, Any] = {
             "fix_mode": {2: "2D", 3: "3D"}.get(mode, "No fix"),
+            "fix_unavailable": mode not in {2, 3},
             "last_update": received_at,
         }
         fields = {
@@ -184,6 +212,9 @@ class MqttPublisher:
         }
         entities = {
             "connection": ("binary_sensor", {"name": "GPSD connection", "device_class": "connectivity", "value_template": "{{ value_json.gpsd_connected }}", "payload_on": "True", "payload_off": "False"}),
+            "data_stale": ("binary_sensor", {"name": "Data stale", "device_class": "problem", "value_template": "{{ value_json.data_stale }}", "payload_on": "True", "payload_off": "False", "entity_category": "diagnostic"}),
+            "fix_unavailable": ("binary_sensor", {"name": "Fix unavailable", "device_class": "problem", "value_template": "{{ value_json.fix_unavailable }}", "payload_on": "True", "payload_off": "False", "entity_category": "diagnostic"}),
+            "quality_degraded": ("binary_sensor", {"name": "Positioning quality degraded", "device_class": "problem", "value_template": "{{ value_json.quality_degraded | default(false) }}", "payload_on": "True", "payload_off": "False", "entity_category": "diagnostic"}),
             "fix_mode": ("sensor", {"name": "Fix mode", "value_template": "{{ value_json.fix_mode }}", "icon": "mdi:crosshairs-gps"}),
             "satellites_visible": ("sensor", {"name": "Satellites visible", "value_template": "{{ value_json.satellites_visible }}", "state_class": "measurement", "icon": "mdi:satellite-variant"}),
             "satellites_used": ("sensor", {"name": "Satellites used", "value_template": "{{ value_json.satellites_used }}", "state_class": "measurement", "icon": "mdi:satellite-uplink"}),
@@ -199,6 +230,9 @@ class MqttPublisher:
             "positioning_quality": ("sensor", {"name": "Positioning quality", "value_template": "{{ value_json.positioning_quality | default(none) }}", "device_class": "enum", "options": ["excellent", "good", "moderate", "poor"], "icon": "mdi:signal"}),
             "horizontal_error": ("sensor", {"name": "Horizontal error", "value_template": "{{ value_json.horizontal_error | default(none) }}", "device_class": "distance", "unit_of_measurement": "m", "state_class": "measurement"}),
             "last_update": ("sensor", {"name": "Last update", "value_template": "{{ value_json.last_update | default(none) }}", "device_class": "timestamp"}),
+            "data_age": ("sensor", {"name": "Data age", "value_template": "{{ value_json.data_age | default(none) }}", "device_class": "duration", "unit_of_measurement": "s", "state_class": "measurement", "entity_category": "diagnostic"}),
+            "reconnect_count": ("sensor", {"name": "GPSD reconnect count", "value_template": "{{ value_json.reconnect_count }}", "state_class": "total_increasing", "icon": "mdi:restart", "entity_category": "diagnostic"}),
+            "receiver": ("sensor", {"name": "Receiver", "value_template": "{{ value_json.receiver_name | default(none) }}", "json_attributes_topic": self.state_topic, "json_attributes_template": "{{ value_json.receiver | default({}) | tojson }}", "icon": "mdi:developer-board", "entity_category": "diagnostic"}),
         }
         for object_id, (component, entity) in entities.items():
             config = common | entity | {"unique_id": f"{self.device_id}_{object_id}"}
