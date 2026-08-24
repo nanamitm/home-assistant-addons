@@ -1,0 +1,80 @@
+title: GPS Status
+views:
+  - title: GPS
+    path: gps
+    icon: mdi:satellite-variant
+    cards:
+      - type: entities
+        title: Position and status
+        show_header_toggle: false
+        entities:
+          - binary_sensor.xgps_web_gpsd_connection
+          - sensor.xgps_web_fix_mode
+          - sensor.xgps_web_positioning_quality
+          - sensor.xgps_web_satellites_visible
+          - sensor.xgps_web_satellites_used
+          - sensor.xgps_web_latitude
+          - sensor.xgps_web_longitude
+          - sensor.xgps_web_altitude
+          - sensor.xgps_web_horizontal_error
+          - sensor.xgps_web_last_update
+
+      - type: gauge
+        name: PDOP
+        entity: sensor.xgps_web_pdop
+        min: 0
+        max: 10
+        needle: true
+        severity:
+          green: 0
+          yellow: 2
+          red: 5
+
+      - type: entities
+        title: Dilution of precision
+        show_header_toggle: false
+        entities:
+          - sensor.xgps_web_hdop
+          - sensor.xgps_web_pdop
+          - sensor.xgps_web_vdop
+          - sensor.xgps_web_gdop
+
+      - type: history-graph
+        title: DOP history
+        hours_to_show: 24
+        entities:
+          - sensor.xgps_web_hdop
+          - sensor.xgps_web_pdop
+          - sensor.xgps_web_vdop
+          - sensor.xgps_web_gdop
+
+      - type: glance
+        title: Satellites by system
+        columns: 3
+        show_state: true
+        entities:
+          - sensor.xgps_web_gps_satellites_used
+          - sensor.xgps_web_galileo_satellites_used
+          - sensor.xgps_web_beidou_satellites_used
+          - sensor.xgps_web_qzss_satellites_used
+          - sensor.xgps_web_glonass_satellites_used
+          - sensor.xgps_web_sbas_satellites_visible
+
+      - type: entities
+        title: Diagnostics
+        show_header_toggle: false
+        entities:
+          - binary_sensor.xgps_web_data_stale
+          - binary_sensor.xgps_web_fix_unavailable
+          - binary_sensor.xgps_web_positioning_quality_degraded
+          - sensor.xgps_web_data_age
+          - sensor.xgps_web_gpsd_reconnect_count
+          - sensor.xgps_web_receiver
+
+      # Enable the add-on's device_tracker option before using this card.
+      # Remove this card if the receiver represents a fixed location.
+      - type: map
+        title: GPS position
+        hours_to_show: 1
+        entities:
+          - device_tracker.xgps_web_position
