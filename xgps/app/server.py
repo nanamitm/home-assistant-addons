@@ -12,6 +12,7 @@ from typing import Any
 
 from aiohttp import WSMsgType, web
 from gpsd_client import GpsdClient
+from mqtt_publisher import MqttPublisher
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
 LOGGER = logging.getLogger("xgps")
@@ -29,6 +30,7 @@ class XgpsService:
         self.tpv: dict[str, Any] = {}
         self.last_packet_at: str | None = None
         self.clients: set[web.WebSocketResponse] = set()
+        self.mqtt = MqttPublisher()
         self.gpsd = GpsdClient(
             os.getenv("GPSD_HOST", "127.0.0.1"),
             int(os.getenv("GPSD_PORT", "2947")),
@@ -39,6 +41,7 @@ class XgpsService:
         self.status_task: asyncio.Task[None] | None = None
 
     async def start(self, _app: web.Application) -> None:
+        self.mqtt.start()
         self.gpsd_task = asyncio.create_task(self.gpsd.run())
         self.status_task = asyncio.create_task(self._status_loop())
 
@@ -52,12 +55,14 @@ class XgpsService:
             self.status_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self.status_task
+        self.mqtt.stop()
 
     async def _status_loop(self) -> None:
         previous: tuple[bool, str, str, int] | None = None
         while True:
             current = (self.gpsd.connected, self.gpsd.status_code, self.gpsd.status, self.gpsd.connection_generation)
             if current != previous:
+                self.mqtt.update_status(current[0])
                 await self.broadcast(
                     {"type": "status", "connected": current[0], "statusCode": current[1], "detail": current[2]}
                 )
@@ -71,9 +76,11 @@ class XgpsService:
         if packet_class == "SKY" and isinstance(packet.get("satellites"), list):
             self.satellites = [item for item in packet["satellites"] if isinstance(item, dict)]
             message = {"type": "sky", "satellites": self.satellites, "receivedAt": self.last_packet_at}
+            self.mqtt.update_sky(self.satellites)
         elif packet_class == "TPV":
             self.tpv = packet
             message = {"type": "tpv", "tpv": self.tpv, "receivedAt": self.last_packet_at}
+            self.mqtt.update_tpv(self.tpv, self.last_packet_at)
         if message is not None:
             await self.broadcast(message)
         if self.allow_raw:

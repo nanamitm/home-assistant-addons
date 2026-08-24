@@ -12,7 +12,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install pytest aiohttp pyyaml
+      - run: pip install pytest aiohttp pyyaml paho-mqtt
       - run: pytest -q
       - run: node --check xgps/app/static/app.js
       - name: Validate add-on configuration
