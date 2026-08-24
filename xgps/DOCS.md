@@ -63,6 +63,14 @@ Diagnostic entities are grouped under the same xgps Web device and can be used
 directly as Home Assistant automation triggers. MQTT availability remains the
 authoritative indication that the add-on itself can reach the broker.
 
+### Satellite-system entities
+
+The device publishes separate used-satellite counts for GPS, Galileo, BeiDou,
+QZSS and GLONASS. SBAS is published as a visible-satellite count because SBAS
+signals are useful reception diagnostics even when gpsd does not mark them as
+used in the navigation solution. These values follow the `gnssid` identifiers
+reported by gpsd and update with each satellite-bearing SKY report.
+
 The optional device tracker is disabled by default because the gpsd receiver
 may represent a fixed installation rather than a moving device. Enable it only
 when its coordinates should be used as a tracked location. Disabling it again

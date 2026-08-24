@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.0
+
+- Added Home Assistant entities for used GPS, Galileo, BeiDou, QZSS and GLONASS satellite counts.
+- Added a Home Assistant entity for the visible SBAS satellite count.
+- Kept per-system counts stable across gpsd DOP-only SKY reports.
+
 ## 0.7.0
 
 - Added diagnostic sensors for data age, GPSD reconnect count and receiver information.
