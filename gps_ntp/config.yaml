@@ -1,0 +1,50 @@
+name: "GPS NTP Server"
+version: "0.1.0"
+slug: gps_ntp
+description: GPS/NMEA and PPS time server powered by gpsd and chrony
+url: https://github.com/nanamitm/home-assistant-addons/tree/main/gps_ntp
+arch:
+  - aarch64
+  - amd64
+init: false
+startup: system
+stage: experimental
+boot: auto
+panel_icon: mdi:clock-check-outline
+uart: true
+udev: true
+devices:
+  - /dev/pps0
+privileged:
+  - SYS_TIME
+ports:
+  123/udp: 123
+  2947/tcp: null
+ports_description:
+  123/udp: NTP
+  2947/tcp: gpsd (optional)
+options:
+  gps_device: /dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FTAVNKJ0-if00-port0
+  pps_device: /dev/pps0
+  use_pps: true
+  pps_via_gpsd: true
+  gpsd_remote_access: false
+  allow_network: 192.168.0.0/16
+  nmea_offset: 0.12
+  pps_offset: 0.0
+  external_ntp:
+    - ntp.jst.mfeed.ad.jp
+    - time.google.com
+  log_measurements: false
+schema:
+  gps_device: device(subsystem=tty)
+  pps_device: str
+  use_pps: bool
+  pps_via_gpsd: bool
+  gpsd_remote_access: bool
+  allow_network: str
+  nmea_offset: float
+  pps_offset: float
+  external_ntp:
+    - str
+  log_measurements: bool
