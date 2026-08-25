@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+"""Render a validated chrony.conf from Home Assistant app options."""
+
+import ipaddress
+import json
+import pathlib
+import re
+import sys
+
+
+HOST_RE = re.compile(r"^[A-Za-z0-9.-]+$")
+DEVICE_RE = re.compile(r"^/dev/[A-Za-z0-9._/+-]+$")
+
+
+def fail(message: str) -> None:
+    raise SystemExit(message)
+
+
+def main() -> None:
+    if len(sys.argv) != 3:
+        fail("usage: render-chrony-config OPTIONS OUTPUT")
+
+    options = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+    network = str(ipaddress.ip_network(options["allow_network"], strict=False))
+    nmea_offset = float(options["nmea_offset"])
+    pps_offset = float(options["pps_offset"])
+    pps_device = options["pps_device"]
+    use_pps = bool(options["use_pps"])
+    pps_via_gpsd = bool(options["pps_via_gpsd"])
+
+    if not -10.0 <= nmea_offset <= 10.0:
+        fail("nmea_offset must be between -10 and 10 seconds")
+    if not -1.0 <= pps_offset <= 1.0:
+        fail("pps_offset must be between -1 and 1 second")
+    if not DEVICE_RE.fullmatch(pps_device):
+        fail("invalid PPS device path")
+
+    servers = options.get("external_ntp", [])
+    if not servers:
+        fail("at least one external NTP server is required")
+    for server in servers:
+        if not HOST_RE.fullmatch(server):
+            fail(f"invalid external NTP server: {server!r}")
+
+    lines = [
+        "driftfile /data/chrony.drift",
+        "dumpdir /data",
+        "makestep 1.0 3",
+        "rtcsync",
+        "maxupdateskew 100.0",
+        "port 123",
+        f"allow {network}",
+        "",
+    ]
+    lines.extend(f"server {server} iburst" for server in servers)
+    lines.extend([
+        "",
+        f"refclock SHM 0 refid GPS poll 2 offset {nmea_offset:.6f} noselect",
+    ])
+    if use_pps:
+        if pps_via_gpsd:
+            lines.append(
+                f"refclock SHM 1 refid PPS poll 2 offset {pps_offset:.6f} prefer"
+            )
+        else:
+            lines.append(
+                f"refclock PPS {pps_device} refid PPS lock GPS offset {pps_offset:.6f} prefer"
+            )
+    if options.get("log_measurements", False):
+        lines.extend(["", "logdir /data/log", "log tracking measurements statistics"])
+
+    pathlib.Path(sys.argv[2]).write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+if __name__ == "__main__":
+    main()
