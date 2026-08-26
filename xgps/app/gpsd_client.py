@@ -23,12 +23,14 @@ class GpsdClient:
         reconnect_interval: float,
         packet_handler: PacketHandler,
         read_timeout: float = READ_TIMEOUT,
+        keep_raw: bool = True,
     ) -> None:
         self.host = host
         self.port = port
         self.reconnect_interval = reconnect_interval
         self.packet_handler = packet_handler
         self.read_timeout = read_timeout
+        self.keep_raw = keep_raw
         self.connected = False
         self.status = "Starting"
         self.status_code = "starting"
@@ -110,7 +112,8 @@ class GpsdClient:
             line = line_bytes.decode("utf-8", errors="replace").strip()
             if not line:
                 continue
-            self.raw_lines.append(line)
+            if self.keep_raw:
+                self.raw_lines.append(line)
             try:
                 packet = json.loads(line)
             except json.JSONDecodeError:

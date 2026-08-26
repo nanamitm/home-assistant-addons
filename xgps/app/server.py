@@ -12,17 +12,13 @@ from typing import Any
 
 from aiohttp import WSMsgType, web
 from gpsd_client import GpsdClient
-from mqtt_publisher import DOP_FIELDS, MqttPublisher, positioning_quality
+from mqtt_publisher import DOP_FIELDS, MqttPublisher, env_bool, positioning_quality
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
 LOGGER = logging.getLogger("xgps")
 STATIC_DIR = Path(__file__).with_name("static")
 # A browser that stops reading must not hold the gpsd read loop open forever.
 SEND_TIMEOUT = 5.0
-
-
-def env_bool(name: str, default: bool = False) -> bool:
-    return os.getenv(name, str(default)).lower() in {"1", "true", "yes", "on"}
 
 
 class XgpsService:
@@ -42,6 +38,7 @@ class XgpsService:
             int(os.getenv("GPSD_PORT", "2947")),
             float(os.getenv("RECONNECT_INTERVAL", "5")),
             self.on_packet,
+            keep_raw=self.allow_raw,
         )
         self.gpsd_task: asyncio.Task[None] | None = None
         self.status_task: asyncio.Task[None] | None = None
@@ -166,7 +163,20 @@ class XgpsService:
             task.add_done_callback(self._closing.discard)
 
     def snapshot(self) -> dict[str, Any]:
-        return {"type":"snapshot", "connected":self.gpsd.connected, "statusCode":self.gpsd.status_code, "detail":self.gpsd.status, "gpsdHost":self.gpsd.host, "gpsdPort":self.gpsd.port, "lastPacketAt":self.last_packet_at, "satellites":self.satellites, "tpv":self.tpv, **self.dop, "rawEnabled":self.allow_raw, "raw":list(self.gpsd.raw_lines) if self.allow_raw else []}
+        return {
+            "type": "snapshot",
+            "connected": self.gpsd.connected,
+            "statusCode": self.gpsd.status_code,
+            "detail": self.gpsd.status,
+            "gpsdHost": self.gpsd.host,
+            "gpsdPort": self.gpsd.port,
+            "lastPacketAt": self.last_packet_at,
+            "satellites": self.satellites,
+            "tpv": self.tpv,
+            **self.dop,
+            "rawEnabled": self.allow_raw,
+            "raw": list(self.gpsd.raw_lines),
+        }
 
 
 service = XgpsService()
