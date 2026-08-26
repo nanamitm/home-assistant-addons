@@ -34,22 +34,39 @@ fi
 
 mkdir -p /tmp/nginx_client_body /tmp/nginx_proxy /run/nginx
 
-python3 /opt/xgps/server.py &
-APP_PID=$!
-
-trap 'kill "${APP_PID}" 2>/dev/null || true' EXIT INT TERM
-
 if ! nginx -t; then
     bashio::log.fatal "Invalid nginx configuration"
-    exit 1
+    bashio::exit.nok
 fi
+
+APP_PID=""
+NGINX_PID=""
+
+cleanup() {
+    if [ -n "${APP_PID}" ]; then
+        kill "${APP_PID}" 2>/dev/null || true
+    fi
+    if [ -n "${NGINX_PID}" ]; then
+        kill "${NGINX_PID}" 2>/dev/null || true
+    fi
+    return 0
+}
+
+trap cleanup EXIT INT TERM
+
+python3 /opt/xgps/server.py &
+APP_PID=$!
 
 bashio::log.info "Starting xgps Web for gpsd at ${GPSD_HOST}:${GPSD_PORT}"
 nginx -g "daemon off;" &
 NGINX_PID=$!
 
-wait -n "${APP_PID}" "${NGINX_PID}"
-STATUS=$?
-kill "${APP_PID}" "${NGINX_PID}" 2>/dev/null || true
+# `set -e` would abort the script on a non-zero `wait -n`, skipping the
+# shutdown below, so capture the status instead of letting it propagate.
+STATUS=0
+wait -n "${APP_PID}" "${NGINX_PID}" || STATUS=$?
+
+bashio::log.info "A service exited with status ${STATUS}; stopping the add-on."
+cleanup
 wait || true
 exit "${STATUS}"
