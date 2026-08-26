@@ -58,6 +58,12 @@ class GpsdClient:
                 self.status = f"gpsd connection error: {err}"
                 self.status_code = "connection_error"
                 LOGGER.warning(self.status)
+            except Exception:
+                # Anything the packet handler raises would otherwise end run()
+                # and silently take the gpsd connection down for good.
+                self.status = "Unexpected gpsd client error"
+                self.status_code = "client_error"
+                LOGGER.exception(self.status)
             finally:
                 self.connected = False
                 if self._writer is not None:

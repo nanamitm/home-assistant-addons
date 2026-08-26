@@ -46,6 +46,43 @@ def test_silent_socket_times_out_and_reconnects():
     asyncio.run(exercise())
 
 
+def test_handler_error_does_not_end_the_client():
+    async def exercise():
+        attempts = []
+
+        async def failing_gpsd(reader, writer):
+            attempts.append(await reader.readline())
+            writer.write(b'{"class":"SKY"}\n')
+            await writer.drain()
+            await asyncio.sleep(0.2)
+
+        async def handler(_packet, _raw):
+            raise ValueError("handler is broken")
+
+        server = await asyncio.start_server(failing_gpsd, "127.0.0.1", 0)
+        port = server.sockets[0].getsockname()[1]
+        client = GpsdClient("127.0.0.1", port, 0.01, handler)
+        task = asyncio.create_task(client.run())
+        for _ in range(200):
+            if len(attempts) >= 2:
+                break
+            await asyncio.sleep(0.01)
+        await client.stop()
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        server.close()
+        await server.wait_closed()
+
+        # run() survived the handler error and reconnected instead of ending.
+        assert len(attempts) >= 2
+        assert client.status_code == "client_error"
+
+    asyncio.run(exercise())
+
+
 def test_manual_reconnect_sets_state():
     async def exercise():
         async def handler(_packet, _raw):

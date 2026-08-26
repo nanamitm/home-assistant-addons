@@ -42,11 +42,25 @@ class XgpsService:
         )
         self.gpsd_task: asyncio.Task[None] | None = None
         self.status_task: asyncio.Task[None] | None = None
+        self.failed_task: str | None = None
 
     async def start(self, _app: web.Application) -> None:
         self.mqtt.start()
-        self.gpsd_task = asyncio.create_task(self.gpsd.run())
-        self.status_task = asyncio.create_task(self._status_loop())
+        self.gpsd_task = self._supervise(asyncio.create_task(self.gpsd.run()), "gpsd")
+        self.status_task = self._supervise(asyncio.create_task(self._status_loop()), "status")
+
+    def _supervise(self, task: asyncio.Task[None], name: str) -> asyncio.Task[None]:
+        """Surface a background task that ends on its own, so /health can fail."""
+
+        def finished(completed: asyncio.Task[None]) -> None:
+            if completed.cancelled():
+                return
+            error = completed.exception()
+            LOGGER.error("The %s task stopped unexpectedly", name, exc_info=error)
+            self.failed_task = name
+
+        task.add_done_callback(finished)
+        return task
 
     async def stop(self, _app: web.Application) -> None:
         await self.gpsd.stop()
@@ -63,17 +77,23 @@ class XgpsService:
     async def _status_loop(self) -> None:
         previous: tuple[bool, str, str, int] | None = None
         while True:
-            current = (self.gpsd.connected, self.gpsd.status_code, self.gpsd.status, self.gpsd.connection_generation)
-            if current != previous:
-                self.mqtt.update_status(current[0], current[3])
-                await self.broadcast(
-                    {"type": "status", "connected": current[0], "statusCode": current[1], "detail": current[2]}
-                )
-                previous = current
-            data_age = None
-            if self.last_packet_monotonic is not None:
-                data_age = max(0, int(asyncio.get_running_loop().time() - self.last_packet_monotonic))
-            self.mqtt.update_diagnostics(data_age)
+            try:
+                current = (self.gpsd.connected, self.gpsd.status_code, self.gpsd.status, self.gpsd.connection_generation)
+                if current != previous:
+                    self.mqtt.update_status(current[0], current[3])
+                    await self.broadcast(
+                        {"type": "status", "connected": current[0], "statusCode": current[1], "detail": current[2]}
+                    )
+                    previous = current
+                data_age = None
+                if self.last_packet_monotonic is not None:
+                    data_age = max(0, int(asyncio.get_running_loop().time() - self.last_packet_monotonic))
+                self.mqtt.update_diagnostics(data_age)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                # One bad iteration must not stop status and diagnostic updates.
+                LOGGER.exception("Status update failed")
             await asyncio.sleep(1)
 
     async def on_packet(self, packet: dict[str, Any], raw: str) -> None:
@@ -134,13 +154,18 @@ async def index(_request: web.Request) -> web.FileResponse:
 
 async def health(_request: web.Request) -> web.Response:
     """Report process health without treating a remote gpsd outage as fatal."""
-    return web.json_response(
-        {
-            "status": "ok",
-            "gpsd_connected": service.gpsd.connected,
-            "gpsd_status": service.gpsd.status,
-        }
-    )
+    payload: dict[str, Any] = {
+        "status": "ok",
+        "gpsd_connected": service.gpsd.connected,
+        "gpsd_status": service.gpsd.status,
+    }
+    if service.failed_task is not None:
+        # A dead background task cannot recover on its own, so fail the
+        # Supervisor watchdog and let it restart the add-on.
+        payload["status"] = "error"
+        payload["failed_task"] = service.failed_task
+        return web.json_response(payload, status=503)
+    return web.json_response(payload)
 
 
 async def websocket(request: web.Request) -> web.WebSocketResponse:

@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import sys
 from pathlib import Path
 
@@ -8,6 +9,12 @@ from server import XgpsService
 
 class FakeMqtt:
     def update_sky(self, _packet):
+        pass
+
+    def update_status(self, _connected, _generation):
+        pass
+
+    def update_diagnostics(self, _data_age):
         pass
 
 
@@ -33,5 +40,49 @@ def test_sky_dop_is_in_live_message_and_snapshot():
         assert messages[-1]["satellites"] == [{"PRN": 1, "used": True}]
         assert service.snapshot()["hdop"] == 0.5
         assert service.snapshot()["vdop"] == 0.9
+
+    asyncio.run(exercise())
+
+
+def test_status_loop_survives_a_broadcast_failure():
+    async def exercise():
+        service = XgpsService()
+        service.mqtt = FakeMqtt()
+        calls = []
+
+        async def broken(message):
+            calls.append(message)
+            raise RuntimeError("broadcast is broken")
+
+        service.broadcast = broken
+        task = asyncio.create_task(service._status_loop())
+        for _ in range(200):
+            if calls:
+                break
+            await asyncio.sleep(0.01)
+        await asyncio.sleep(0.05)
+        assert not task.done()
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        assert calls
+
+    asyncio.run(exercise())
+
+
+def test_health_fails_after_a_background_task_dies():
+    async def exercise():
+        service = XgpsService()
+
+        async def boom():
+            raise RuntimeError("task is broken")
+
+        task = service._supervise(asyncio.create_task(boom()), "gpsd")
+        with contextlib.suppress(RuntimeError):
+            await task
+        await asyncio.sleep(0)
+        assert service.failed_task == "gpsd"
 
     asyncio.run(exercise())
