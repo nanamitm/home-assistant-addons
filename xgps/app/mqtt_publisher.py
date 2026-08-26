@@ -57,6 +57,7 @@ class MqttPublisher:
         self.device_name = os.getenv("DEVICE_NAME", "xgps Web")
         self.device_id = os.getenv("DEVICE_ID", "xgps_web")
         self.tracker_enabled = env_bool("DEVICE_TRACKER")
+        self.sw_version = os.getenv("XGPS_VERSION", "").strip()
         self.base_topic = f"xgps_web/{self.device_id}"
         self.state_topic = f"{self.base_topic}/state"
         self.availability_topic = f"{self.base_topic}/availability"
@@ -259,20 +260,29 @@ class MqttPublisher:
             client.publish(self.tracker_topic, json.dumps(tracker, separators=(",", ":")), qos=1, retain=True)
 
     def _publish_discovery(self, client: mqtt.Client) -> None:
-        device = {
+        device: dict[str, Any] = {
             "identifiers": [self.device_id],
             "name": self.device_name,
             "manufacturer": "nanamitm",
             "model": "xgps Web",
-            "sw_version": "1.0.0",
         }
+        origin: dict[str, Any] = {
+            "name": "xgps Web",
+            "support_url": "https://github.com/nanamitm/home-assistant-addons",
+        }
+        # The add-on version comes from the image build rather than a literal
+        # that has to be kept in step with config.yaml by hand. Report nothing
+        # rather than a wrong version when the build did not supply one.
+        if self.sw_version:
+            device["sw_version"] = self.sw_version
+            origin["sw_version"] = self.sw_version
         common = {
             "state_topic": self.state_topic,
             "availability_topic": self.availability_topic,
             "payload_available": "online",
             "payload_not_available": "offline",
             "device": device,
-            "origin": {"name": "xgps Web", "sw_version": "1.0.0", "support_url": "https://github.com/nanamitm/home-assistant-addons"},
+            "origin": origin,
         }
         entities = {
             "connection": ("binary_sensor", {"name": "GPSD connection", "device_class": "connectivity", "value_template": "{{ value_json.gpsd_connected }}", "payload_on": "True", "payload_off": "False"}),

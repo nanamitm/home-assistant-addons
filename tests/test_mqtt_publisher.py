@@ -213,6 +213,24 @@ def test_discovery_groups_entities_under_one_device(monkeypatch):
     assert any(topic.endswith("/device_tracker/roof_gps/position/config") and payload == "" for topic, payload, _, _ in client.messages)
 
 
+def test_version_comes_from_the_image_build(monkeypatch):
+    monkeypatch.setenv("XGPS_VERSION", "1.1.0")
+    result = publisher(monkeypatch)
+    result._publish_discovery(result._client)
+    config = next(json.loads(payload) for _, payload, _, _ in result._client.messages if payload)
+    assert config["device"]["sw_version"] == "1.1.0"
+    assert config["origin"]["sw_version"] == "1.1.0"
+
+
+def test_version_is_omitted_when_the_build_did_not_supply_one(monkeypatch):
+    monkeypatch.delenv("XGPS_VERSION", raising=False)
+    result = publisher(monkeypatch)
+    result._publish_discovery(result._client)
+    config = next(json.loads(payload) for _, payload, _, _ in result._client.messages if payload)
+    assert "sw_version" not in config["device"]
+    assert "sw_version" not in config["origin"]
+
+
 def test_tracker_is_opt_in(monkeypatch):
     monkeypatch.setenv("DEVICE_TRACKER", "true")
     result = publisher(monkeypatch)
