@@ -129,6 +129,37 @@ def test_diagnostics_and_receiver(monkeypatch):
     }
 
 
+def test_ticking_data_age_does_not_republish_every_second(monkeypatch):
+    result = publisher(monkeypatch)
+    result.update_diagnostics(0)
+    published = len(result._client.messages)
+
+    # A gpsd outage makes data_age tick once a second. The first tick crosses
+    # the stale threshold and must be published; the rest must stay quiet.
+    for data_age in range(1, 60):
+        result.update_diagnostics(data_age)
+
+    assert result._state["data_age"] == 59
+    assert result._state["data_stale"] is True
+    assert len(result._client.messages) == published + 1
+
+    state = json.loads(result._client.messages[-1][1])
+    assert state["data_stale"] is True
+
+
+def test_data_age_is_refreshed_on_a_slow_cadence(monkeypatch):
+    result = publisher(monkeypatch)
+    result.update_diagnostics(0)
+    result.update_diagnostics(20)
+    published = len(result._client.messages)
+
+    result._data_age_published_at -= 31
+    result.update_diagnostics(21)
+
+    assert len(result._client.messages) == published + 1
+    assert json.loads(result._client.messages[-1][1])["data_age"] == 21
+
+
 def test_unchanged_state_is_not_republished(monkeypatch):
     result = publisher(monkeypatch)
     result.update_diagnostics(0)

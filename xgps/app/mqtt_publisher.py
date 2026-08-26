@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import threading
+import time
 import contextlib
 from copy import deepcopy
 from typing import Any
@@ -13,6 +14,11 @@ import paho.mqtt.client as mqtt
 
 LOGGER = logging.getLogger(__name__)
 DOP_FIELDS = ("hdop", "pdop", "vdop", "gdop")
+DATA_STALE_AFTER = 15
+# data_age ticks once a second for as long as gpsd is unreachable. Refresh it on
+# a slow cadence so an outage cannot republish the whole state document every
+# second; data_stale still changes the moment the data goes stale.
+DATA_AGE_INTERVAL = 30.0
 SYSTEM_COUNTS = {
     "gps_satellites_used": (0, True),
     "sbas_satellites_visible": (1, False),
@@ -66,6 +72,7 @@ class MqttPublisher:
         }
         self._lock = threading.Lock()
         self._client: mqtt.Client | None = None
+        self._data_age_published_at = 0.0
 
     def start(self) -> None:
         if not self.enabled:
@@ -102,11 +109,16 @@ class MqttPublisher:
         )
 
     def update_diagnostics(self, data_age: int | None) -> None:
+        now = time.monotonic()
+        due = now - self._data_age_published_at >= DATA_AGE_INTERVAL
+        if due:
+            self._data_age_published_at = now
         self.update(
             {
                 "data_age": data_age,
-                "data_stale": data_age is None or data_age > 15,
-            }
+                "data_stale": data_age is None or data_age > DATA_STALE_AFTER,
+            },
+            quiet=frozenset() if due else frozenset({"data_age"}),
         )
 
     def update_device(self, device: dict[str, Any]) -> None:
@@ -171,11 +183,19 @@ class MqttPublisher:
                 values[target] = value
         self.update(values)
 
-    def update(self, values: dict[str, Any]) -> None:
+    def update(self, values: dict[str, Any], quiet: frozenset[str] = frozenset()) -> None:
+        """Merge values into the state document, publishing only when it matters.
+
+        Keys listed in `quiet` are recorded so the next publish carries them,
+        but do not trigger a publish of their own.
+        """
         with self._lock:
-            if all(self._state.get(key) == value for key, value in values.items()):
+            changed = {key for key, value in values.items() if self._state.get(key) != value}
+            if not changed:
                 return
             self._state.update(values)
+            if not changed - quiet:
+                return
             state = deepcopy(self._state)
         if self._client is not None and self._client.is_connected():
             self._publish_state(state)
