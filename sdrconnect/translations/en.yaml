@@ -1,0 +1,60 @@
+configuration:
+  mode:
+    name: Mode
+    description: >-
+      server publishes the receiver on a TCP port for SDRconnect clients.
+      headless serves the SDRconnect interface to a browser over a websocket.
+  port:
+    name: Server port
+    description: TCP port the SDRconnect server listens on.
+  websocket_port:
+    name: Websocket port
+    description: Port the headless interface is served on.
+  bind_address:
+    name: Bind address
+    description: Address to listen on. Leave empty to listen on every interface.
+  log_level:
+    name: Log level
+    description: Verbosity of the add-on log.
+  device_serial:
+    name: Receiver serial number
+    description: Serial number of the RSP to use, as printed in the log at start-up.
+  samplerate:
+    name: Sample rate
+    description: Sample rate in Hz. Leave empty for the receiver default.
+  centerfrequency:
+    name: Centre frequency
+    description: Frequency in Hz to tune to at start-up.
+  antenna:
+    name: Antenna
+    description: Antenna input number to use.
+  lnastate:
+    name: LNA state
+    description: LNA state. The useful range depends on the model and band.
+  ifgr:
+    name: IF gain reduction
+    description: IF gain reduction in dB. Applies when IF AGC is off.
+  ifagc:
+    name: IF AGC
+    description: Let the receiver set the IF gain automatically.
+  setpoint:
+    name: AGC set point
+    description: AGC set point in dBfs.
+  biast:
+    name: Bias-T
+    description: Power a mast-head amplifier or active antenna from the antenna port.
+  rfnotch:
+    name: FM/MW notch
+    description: Enable the broadcast FM and medium wave notch filter.
+  dabnotch:
+    name: DAB notch
+    description: Enable the DAB notch filter.
+  exclusive:
+    name: Exclusive control
+    description: Prevent connecting clients from changing the receiver settings.
+  max_clients:
+    name: Maximum clients
+    description: Maximum number of clients allowed to connect at the same time.
+  extra_args:
+    name: Extra arguments
+    description: Additional SDRconnect command line arguments, passed through as typed.

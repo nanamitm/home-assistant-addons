@@ -32,4 +32,29 @@ jobs:
           assert dashboard["views"][0]["cards"]
           assert len(automations) == 4
           assert all(item["trigger"] and item["action"] for item in automations)
+          config = yaml.safe_load(open("sdrconnect/config.yaml"))
+          build = yaml.safe_load(open("sdrconnect/build.yaml"))
+          assert config["slug"] == "sdrconnect"
+          assert set(config["arch"]) == {"amd64", "aarch64"}
+          assert config["usb"] is True and config["udev"] is True
+          assert config["host_network"] is True
+          # The SDRplay licence does not allow redistribution, so this add-on
+          # must keep building locally instead of pulling a published image.
+          assert "image" not in config
+          assert set(build["build_from"]) == {"amd64", "aarch64"}
+          args = build["args"]
+          assert args["SDRCONNECT_BUILD"]
+          assert all(
+              len(args[key]) == 64 and int(args[key], 16) >= 0
+              for key in ("SDRCONNECT_SHA256_AMD64", "SDRCONNECT_SHA256_AARCH64")
+          )
+          options = set(config["schema"])
+          for language in ("en", "ja"):
+              translated = yaml.safe_load(
+                  open(f"sdrconnect/translations/{language}.yaml")
+              )["configuration"]
+              assert set(translated) == options, language
           PY
+
+      - name: Check add-on shell scripts
+        run: bash -n sdrconnect/run.sh

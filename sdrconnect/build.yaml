@@ -1,0 +1,12 @@
+# Debian, not Alpine: SDRconnect is a self-contained .NET application built
+# against glibc, and it needs libicu.  There is no musl build to fall back on.
+build_from:
+  aarch64: ghcr.io/home-assistant/aarch64-base-debian:bookworm
+  amd64: ghcr.io/home-assistant/amd64-base-debian:bookworm
+args:
+  # SDRplay publishes each build under a hash-suffixed file name and removes
+  # older ones, so this pair has to be refreshed when the add-on is updated.
+  # See DOCS.md, "Updating to a new SDRconnect build".
+  SDRCONNECT_BUILD: "93b44446f"
+  SDRCONNECT_SHA256_AMD64: "343914da15ba18399552bb9100a7ea113caa46fed70679a0e690ea93636dc80f"
+  SDRCONNECT_SHA256_AARCH64: "fb97167f30982dbb5ee538e95ea57467c44bc625b4930cb28d98976dbfadd1e9"

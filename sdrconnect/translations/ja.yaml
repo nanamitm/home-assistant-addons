@@ -1,0 +1,60 @@
+configuration:
+  mode:
+    name: モード
+    description: >-
+      serverは受信機をTCPポートで公開し、SDRconnectクライアントから接続します。
+      headlessはSDRconnectの画面をWebSocket経由でブラウザに配信します。
+  port:
+    name: サーバーポート
+    description: SDRconnectサーバーが待ち受けるTCPポートです。
+  websocket_port:
+    name: WebSocketポート
+    description: ヘッドレスモードの画面を配信するポートです。
+  bind_address:
+    name: バインドアドレス
+    description: 待ち受けるアドレスです。空欄の場合はすべてのインターフェースで待ち受けます。
+  log_level:
+    name: ログレベル
+    description: アドオンのログの詳細度です。
+  device_serial:
+    name: 受信機のシリアル番号
+    description: 使用するRSPのシリアル番号です。起動時のログに一覧が出力されます。
+  samplerate:
+    name: サンプルレート
+    description: サンプルレート（Hz）です。空欄の場合は受信機の既定値を使用します。
+  centerfrequency:
+    name: 中心周波数
+    description: 起動時に同調する周波数（Hz）です。
+  antenna:
+    name: アンテナ
+    description: 使用するアンテナ入力の番号です。
+  lnastate:
+    name: LNAステート
+    description: LNAステートです。有効な範囲は機種と周波数帯によって異なります。
+  ifgr:
+    name: IFゲインリダクション
+    description: IFゲインリダクション（dB）です。IF AGCが無効なときに使用されます。
+  ifagc:
+    name: IF AGC
+    description: IFゲインを受信機に自動設定させます。
+  setpoint:
+    name: AGCセットポイント
+    description: AGCのセットポイント（dBfs）です。
+  biast:
+    name: バイアスT
+    description: アンテナ端子からアクティブアンテナやLNAへ給電します。
+  rfnotch:
+    name: FM/MWノッチ
+    description: FM放送および中波のノッチフィルターを有効にします。
+  dabnotch:
+    name: DABノッチ
+    description: DABノッチフィルターを有効にします。
+  exclusive:
+    name: 排他制御
+    description: 接続したクライアントによる受信機設定の変更を禁止します。
+  max_clients:
+    name: 最大クライアント数
+    description: 同時に接続できるクライアントの最大数です。
+  extra_args:
+    name: 追加引数
+    description: SDRconnectへ渡す追加のコマンドライン引数です。入力した内容がそのまま渡されます。

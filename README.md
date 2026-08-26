@@ -6,6 +6,8 @@ General-purpose Home Assistant add-ons maintained by nanamitm.
 
 - **xgps Web** — A stable Ingress GPS/GNSS viewer with optional MQTT Discovery
   entities, diagnostics, dashboard and automation examples.
+- **SDRconnect Server** — Runs the SDRplay SDRconnect server against an RSP
+  receiver on the host, for tuning from SDRconnect clients or a browser.
 
 Add this repository to the Home Assistant add-on store:
 

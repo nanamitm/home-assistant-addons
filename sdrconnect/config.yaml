@@ -1,0 +1,58 @@
+name: SDRconnect Server
+version: "0.1.0"
+slug: sdrconnect
+description: SDRplay SDRconnect server for RSP receivers plugged into the host
+url: https://github.com/nanamitm/home-assistant-addons/tree/main/sdrconnect
+# No `image:` key on purpose.  The SDRplay licence grants the right to run and
+# display the software, not to redistribute it, so this add-on is built on the
+# user's own machine and downloads the official package from sdrplay.com during
+# the build.  Publishing a prebuilt image to a registry would redistribute it.
+arch:
+  - aarch64
+  - amd64
+init: false
+startup: services
+
+# The RSP is a USB device on the host: `usb` maps /dev/bus/usb into the add-on
+# and `udev` gives SDRconnect the device metadata it needs to tell receivers
+# apart.  Protection mode stays on -- libusb does not need `full_access`.
+usb: true
+udev: true
+
+# SDRconnect clients find servers with a broadcast on the local network, which
+# does not cross the add-on's bridge network, and the stream itself is a plain
+# TCP port rather than something ingress can proxy.  Host networking is what
+# makes both "Discover" and a fixed port work.
+host_network: true
+
+# No watchdog: the listening port comes from the options below, and a watchdog
+# URL cannot read them.  A hard-coded port would restart the add-on in a loop
+# as soon as anyone changed `port` or switched to headless mode.
+
+options:
+  mode: server
+  port: 50000
+  websocket_port: 5454
+  log_level: info
+schema:
+  mode: list(server|headless)
+  port: port
+  websocket_port: port
+  bind_address: str?
+  log_level: list(debug|info|warning|error)
+  # Everything below is passed to server mode only; headless mode is configured
+  # from the browser client it serves.
+  device_serial: str?
+  samplerate: float?
+  centerfrequency: float?
+  antenna: int(1,3)?
+  lnastate: int(0,27)?
+  ifgr: int(20,59)?
+  ifagc: bool?
+  setpoint: int(-72,0)?
+  biast: bool?
+  rfnotch: bool?
+  dabnotch: bool?
+  exclusive: bool?
+  max_clients: int(1,8)?
+  extra_args: str?
