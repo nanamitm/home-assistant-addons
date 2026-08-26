@@ -17,6 +17,8 @@ from mqtt_publisher import DOP_FIELDS, MqttPublisher, positioning_quality
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
 LOGGER = logging.getLogger("xgps")
 STATIC_DIR = Path(__file__).with_name("static")
+# A browser that stops reading must not hold the gpsd read loop open forever.
+SEND_TIMEOUT = 5.0
 
 
 def env_bool(name: str, default: bool = False) -> bool:
@@ -33,6 +35,7 @@ class XgpsService:
         self.last_packet_at: str | None = None
         self.last_packet_monotonic: float | None = None
         self.clients: set[web.WebSocketResponse] = set()
+        self._closing: set[asyncio.Task[None]] = set()
         self.mqtt = MqttPublisher()
         self.gpsd = GpsdClient(
             os.getenv("GPSD_HOST", "127.0.0.1"),
@@ -131,15 +134,36 @@ class XgpsService:
         if self.allow_raw:
             await self.broadcast({"type": "raw", "line": raw})
 
+    async def _send(self, client: web.WebSocketResponse, payload: str) -> web.WebSocketResponse | None:
+        """Send to one client, returning it when it should be dropped."""
+        try:
+            await asyncio.wait_for(client.send_str(payload), timeout=SEND_TIMEOUT)
+        except asyncio.TimeoutError:
+            LOGGER.warning("Dropping a WebSocket client that stopped reading")
+        except (ConnectionError, RuntimeError):
+            pass
+        except Exception:
+            LOGGER.exception("Unexpected WebSocket send failure")
+        else:
+            return None
+        return client
+
     async def broadcast(self, message: dict[str, Any]) -> None:
-        stale = []
+        clients = tuple(self.clients)
+        if not clients:
+            return
         payload = json.dumps(message, separators=(",", ":"))
-        for client in tuple(self.clients):
-            try:
-                await client.send_str(payload)
-            except (ConnectionError, RuntimeError):
-                stale.append(client)
+        # Send concurrently. Awaiting one client at a time let a single stalled
+        # browser block every other client and the gpsd read loop behind it.
+        results = await asyncio.gather(*(self._send(client, payload) for client in clients))
+        stale = [client for client in results if client is not None]
+        if not stale:
+            return
         self.clients.difference_update(stale)
+        for client in stale:
+            task = asyncio.create_task(client.close())
+            self._closing.add(task)
+            task.add_done_callback(self._closing.discard)
 
     def snapshot(self) -> dict[str, Any]:
         return {"type":"snapshot", "connected":self.gpsd.connected, "statusCode":self.gpsd.status_code, "detail":self.gpsd.status, "gpsdHost":self.gpsd.host, "gpsdPort":self.gpsd.port, "lastPacketAt":self.last_packet_at, "satellites":self.satellites, "tpv":self.tpv, **self.dop, "rawEnabled":self.allow_raw, "raw":list(self.gpsd.raw_lines) if self.allow_raw else []}

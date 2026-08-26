@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "xgps" / "app"))
+import server
 from server import XgpsService
 
 
@@ -84,5 +85,44 @@ def test_health_fails_after_a_background_task_dies():
             await task
         await asyncio.sleep(0)
         assert service.failed_task == "gpsd"
+
+    asyncio.run(exercise())
+
+
+class StalledClient:
+    def __init__(self):
+        self.closed = False
+
+    async def send_str(self, _payload):
+        await asyncio.Event().wait()
+
+    async def close(self):
+        self.closed = True
+
+
+class FastClient:
+    def __init__(self):
+        self.payloads = []
+
+    async def send_str(self, payload):
+        self.payloads.append(payload)
+
+    async def close(self):
+        pass
+
+
+def test_a_stalled_client_is_dropped_without_blocking_the_others(monkeypatch):
+    async def exercise():
+        monkeypatch.setattr(server, "SEND_TIMEOUT", 0.05)
+        service = XgpsService()
+        stalled, fast = StalledClient(), FastClient()
+        service.clients.update({stalled, fast})
+
+        await service.broadcast({"type": "sky"})
+
+        assert fast.payloads == ['{"type":"sky"}']
+        assert service.clients == {fast}
+        await asyncio.sleep(0)
+        assert stalled.closed is True
 
     asyncio.run(exercise())
