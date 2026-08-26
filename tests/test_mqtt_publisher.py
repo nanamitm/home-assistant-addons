@@ -72,6 +72,16 @@ def test_dop_only_sky_packet_updates_hdop_without_resetting_counts(monkeypatch):
     assert result._state["satellites_used"] == 1
 
 
+def test_altitude_prefers_mean_sea_level(monkeypatch):
+    result = publisher(monkeypatch)
+    result.update_tpv({"mode": 3, "altHAE": 51.4, "altMSL": 12.5, "alt": 12.5}, "now")
+    assert result._state["altitude"] == 12.5
+
+    result = publisher(monkeypatch)
+    result.update_tpv({"mode": 3, "altHAE": 51.4}, "now")
+    assert result._state["altitude"] == 51.4
+
+
 def test_satellite_counts_by_system(monkeypatch):
     result = publisher(monkeypatch)
     result.update_sky(

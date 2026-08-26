@@ -171,11 +171,17 @@ class MqttPublisher:
             "fix_unavailable": mode not in {2, 3},
             "last_update": received_at,
         }
+        # Insertion order is the preference order: the first source that
+        # carries a usable value wins, because of the `target not in values`
+        # guard below. Height above mean sea level is what "altitude" means to
+        # a reader, so the ellipsoid height is only a last resort. The web
+        # interface resolves altitude in the same order.
         fields = {
             "lat": "latitude",
             "lon": "longitude",
             "altMSL": "altitude",
             "alt": "altitude",
+            "altHAE": "altitude",
             "speed": "speed",
             "track": "track",
             "hdop": "hdop",
