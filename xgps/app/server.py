@@ -45,6 +45,7 @@ class XgpsService:
         self.gpsd_task: asyncio.Task[None] | None = None
         self.status_task: asyncio.Task[None] | None = None
         self.failed_task: str | None = None
+        self.shutting_down = False
 
     async def start(self, _app: web.Application) -> None:
         self.mqtt.start()
@@ -55,7 +56,9 @@ class XgpsService:
         """Surface a background task that ends on its own, so /health can fail."""
 
         def finished(completed: asyncio.Task[None]) -> None:
-            if completed.cancelled():
+            # A loop that ends while the add-on is shutting down is expected;
+            # only an unprompted exit is a failure.
+            if completed.cancelled() or self.shutting_down:
                 return
             error = completed.exception()
             LOGGER.error("The %s task stopped unexpectedly", name, exc_info=error)
@@ -65,6 +68,7 @@ class XgpsService:
         return task
 
     async def stop(self, _app: web.Application) -> None:
+        self.shutting_down = True
         await self.gpsd.stop()
         if self.gpsd_task is not None:
             self.gpsd_task.cancel()

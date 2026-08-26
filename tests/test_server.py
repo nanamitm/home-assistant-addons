@@ -73,6 +73,23 @@ def test_status_loop_survives_a_broadcast_failure():
     asyncio.run(exercise())
 
 
+def test_shutdown_is_not_reported_as_a_failure():
+    async def exercise():
+        service = XgpsService()
+        service.mqtt = FakeMqtt()
+        service.shutting_down = True
+
+        async def ends():
+            return None
+
+        task = service._supervise(asyncio.create_task(ends()), "gpsd")
+        await task
+        await asyncio.sleep(0)
+        assert service.failed_task is None
+
+    asyncio.run(exercise())
+
+
 def test_health_fails_after_a_background_task_dies():
     async def exercise():
         service = XgpsService()
