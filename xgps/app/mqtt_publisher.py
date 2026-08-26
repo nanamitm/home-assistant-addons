@@ -73,6 +73,7 @@ class MqttPublisher:
         self._lock = threading.Lock()
         self._client: mqtt.Client | None = None
         self._data_age_published_at = 0.0
+        self._sky_reports_hdop = False
 
     def start(self) -> None:
         if not self.enabled:
@@ -158,6 +159,8 @@ class MqttPublisher:
             value = sky.get(field)
             if isinstance(value, (int, float)):
                 values[field] = value
+                if field == "hdop":
+                    self._sky_reports_hdop = True
         if "pdop" in values:
             values["positioning_quality"] = positioning_quality(values["pdop"])
             values["quality_degraded"] = values["positioning_quality"] in {"moderate", "poor"}
@@ -184,13 +187,19 @@ class MqttPublisher:
             "altHAE": "altitude",
             "speed": "speed",
             "track": "track",
-            "hdop": "hdop",
             "eph": "horizontal_error",
         }
         for source, target in fields.items():
             value = tpv.get(source)
             if isinstance(value, (int, float)) and target not in values:
                 values[target] = value
+        # SKY is the authoritative source for HDOP. Letting TPV write it too
+        # made the two sources overwrite each other on every packet, which
+        # republished the whole state document each time. Fall back to the TPV
+        # copy only for receivers whose SKY reports never carry HDOP, which is
+        # what the web interface does as well.
+        if not self._sky_reports_hdop and isinstance(tpv.get("hdop"), (int, float)):
+            values["hdop"] = tpv["hdop"]
         self.update(values)
 
     def update(self, values: dict[str, Any], quiet: frozenset[str] = frozenset()) -> None:

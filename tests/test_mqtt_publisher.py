@@ -82,6 +82,24 @@ def test_altitude_prefers_mean_sea_level(monkeypatch):
     assert result._state["altitude"] == 51.4
 
 
+def test_sky_hdop_wins_over_the_tpv_copy(monkeypatch):
+    result = publisher(monkeypatch)
+    result.update_sky({"hdop": 0.6})
+    result.update_tpv({"mode": 3, "hdop": 0.9, "lat": 35.1, "lon": 139.2}, "now")
+    assert result._state["hdop"] == 0.6
+
+    published = len(result._client.messages)
+    result.update_tpv({"mode": 3, "hdop": 0.9, "lat": 35.1, "lon": 139.2}, "now")
+    assert len(result._client.messages) == published
+
+
+def test_tpv_hdop_is_used_when_sky_never_reports_one(monkeypatch):
+    result = publisher(monkeypatch)
+    result.update_sky({"pdop": 1.2})
+    result.update_tpv({"mode": 3, "hdop": 0.9}, "now")
+    assert result._state["hdop"] == 0.9
+
+
 def test_satellite_counts_by_system(monkeypatch):
     result = publisher(monkeypatch)
     result.update_sky(
