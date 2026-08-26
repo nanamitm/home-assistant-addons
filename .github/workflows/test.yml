@@ -18,9 +18,50 @@ jobs:
       - name: Validate add-on configuration
         run: |
           python - <<'PY'
+          import pathlib
+
           import yaml
+
+          ADDONS = ("gps_ntp", "sdrconnect", "xgps")
+
+
+          def dockerfile(addon):
+              return pathlib.Path(f"{addon}/Dockerfile").read_text()
+
+
+          for addon in ADDONS:
+              config = yaml.safe_load(open(f"{addon}/config.yaml"))
+              # The base image must come from a build argument. A literal base follows
+              # the architecture of whichever machine runs the build instead of the one
+              # being built for.
+              from_line = next(
+                  line for line in dockerfile(addon).splitlines() if line.startswith("FROM ")
+              )
+              assert "${BUILD_" in from_line, (addon, from_line)
+              # The release notes must describe the version being released.
+              changelog = pathlib.Path(f"{addon}/CHANGELOG.md").read_text().splitlines()
+              latest = next(line for line in changelog if line.startswith("## "))
+              assert latest == f"## {config['version']}", (addon, latest)
+
+          # The Supervisor builds these locally and reads their base from build.yaml.
+          for addon in ("gps_ntp", "sdrconnect"):
+              config = yaml.safe_load(open(f"{addon}/config.yaml"))
+              build = yaml.safe_load(open(f"{addon}/build.yaml"))
+              assert "image" not in config, addon
+              assert "ARG BUILD_FROM" in dockerfile(addon), addon
+              # Every supported architecture needs a base image to build from.
+              assert set(build["build_from"]) == set(config["arch"]), addon
+
+          # Every option offered in the interface needs a name and a description.
+          for addon in ("sdrconnect", "xgps"):
+              options = set(yaml.safe_load(open(f"{addon}/config.yaml"))["schema"])
+              for language in ("en", "ja"):
+                  translated = yaml.safe_load(
+                      open(f"{addon}/translations/{language}.yaml")
+                  )["configuration"]
+                  assert set(translated) == options, (addon, language)
+
           config = yaml.safe_load(open("xgps/config.yaml"))
-          build = yaml.safe_load(open("xgps/build.yaml"))
           assert config["slug"] == "xgps_web"
           assert config["ingress"] is True
           assert config["watchdog"] == "http://[HOST]:[PORT:8099]/health"
@@ -28,48 +69,34 @@ jobs:
           assert config["services"] == ["mqtt:want"]
           assert config["options"]["mqtt_enabled"] is False
           assert config["stage"] == "stable"
-          # Every published architecture needs a base image to build from.
-          assert set(build["build_from"]) == set(config["arch"])
-          # The release notes must describe the version being released.
-          changelog = open("xgps/CHANGELOG.md").read().splitlines()
-          latest = next(line for line in changelog if line.startswith("## "))
-          assert latest == f"## {config['version']}", latest
-          options = set(config["schema"])
-          for language in ("en", "ja"):
-              translated = yaml.safe_load(
-                  open(f"xgps/translations/{language}.yaml")
-              )["configuration"]
-              assert set(translated) == options, language
+          # xgps ships a published image built by the Home Assistant builder action.
+          # That action passes BUILD_ARCH but never BUILD_FROM, so the Dockerfile has
+          # to pick its own base from the architecture and must not expect BUILD_FROM.
+          assert "ARG BUILD_ARCH" in dockerfile("xgps")
+          assert "${BUILD_ARCH}-base" in dockerfile("xgps")
+          assert not pathlib.Path("xgps/build.yaml").exists()
           dashboard = yaml.safe_load(open("xgps/examples/dashboard.yaml"))
           automations = yaml.safe_load(open("xgps/examples/automations.yaml"))
           assert dashboard["views"][0]["cards"]
           assert len(automations) == 4
           assert all(item["trigger"] and item["action"] for item in automations)
+
           config = yaml.safe_load(open("sdrconnect/config.yaml"))
           build = yaml.safe_load(open("sdrconnect/build.yaml"))
           assert config["slug"] == "sdrconnect"
           assert set(config["arch"]) == {"amd64", "aarch64"}
           assert config["usb"] is True and config["udev"] is True
           assert config["host_network"] is True
-          # The SDRplay licence does not allow redistribution, so this add-on
-          # must keep building locally instead of pulling a published image.
-          assert "image" not in config
-          assert set(build["build_from"]) == {"amd64", "aarch64"}
           args = build["args"]
           assert args["SDRCONNECT_BUILD"]
           assert all(
               len(args[key]) == 64 and int(args[key], 16) >= 0
               for key in ("SDRCONNECT_SHA256_AMD64", "SDRCONNECT_SHA256_AARCH64")
           )
-          sdrconnect_options = set(config["schema"])
-          for language in ("en", "ja"):
-              translated = yaml.safe_load(
-                  open(f"sdrconnect/translations/{language}.yaml")
-              )["configuration"]
-              assert set(translated) == sdrconnect_options, language
           PY
 
       - name: Check add-on shell scripts
         run: |
+          bash -n gps_ntp/run.sh
           bash -n sdrconnect/run.sh
           bash -n xgps/run.sh

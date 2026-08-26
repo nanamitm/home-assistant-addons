@@ -1,5 +1,5 @@
 name: "GPS NTP Server"
-version: "0.1.0"
+version: "0.1.1"
 slug: gps_ntp
 description: GPS/NMEA and PPS time server powered by gpsd and chrony
 url: https://github.com/nanamitm/home-assistant-addons/tree/main/gps_ntp

@@ -23,7 +23,8 @@
 - Added visible IMES and used IRNSS satellite counts.
 - Reported the add-on version from the image build instead of a hardcoded
   literal.
-- Pinned the base image per architecture with a `build.yaml`.
+- Pinned the base image per architecture instead of relying on a multi-arch
+  tag resolving on the build machine.
 
 ## 1.0.0
 

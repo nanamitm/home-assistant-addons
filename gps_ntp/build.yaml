@@ -1,5 +1,5 @@
 # Pin the base image per architecture instead of relying on a multi-arch tag
-# resolving to the architecture the runner happens to have.
+# resolving to the architecture the build happens to run on.
 build_from:
   aarch64: ghcr.io/home-assistant/aarch64-base:3.22
   amd64: ghcr.io/home-assistant/amd64-base:3.22
