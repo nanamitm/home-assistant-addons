@@ -1,0 +1,31 @@
+configuration:
+  gps_device:
+    name: GPSシリアルデバイス
+    description: gpsdがNMEAを読み取るシリアルデバイスです。/dev/ttyUSB0よりも安定した/dev/serial/by-id/...のパスを推奨します。
+  pps_device:
+    name: PPSデバイス
+    description: PPS（1秒パルス）信号を提供するデバイスで、通常は/dev/pps0です。ホスト側で公開されている必要があり、このアドオンが作成することはできません。
+  use_pps:
+    name: PPSを使用
+    description: NMEAに加えてPPS信号でも時刻を調整します。
+  pps_via_gpsd:
+    name: gpsd経由でPPSを取得
+    description: gpsdのSHM 1セグメントからPPSを読み取ります。無効にすると、chronyがPPSデバイスを直接読み取りNMEAソースにロックします。
+  gpsd_remote_access:
+    name: gpsdへのリモートアクセス
+    description: xgpsなどのTCPクライアントからgpsdへ接続できるようにします。ネットワーク設定でホストポート2947の割り当ても必要です。
+  allow_network:
+    name: 許可するネットワーク
+    description: このNTPサーバーへの問い合わせを許可するサブネットです（例 192.168.10.0/24）。UDPポート123をインターネットへ公開しないでください。
+  nmea_offset:
+    name: NMEAオフセット
+    description: シリアル遅延を補正するためNMEA基準クロックへ加算する秒数です（-10〜10）。測位とPPSが安定してから調整してください。
+  pps_offset:
+    name: PPSオフセット
+    description: PPS基準クロックへ加算する秒数です（-1〜1）。数時間分の測定を集めてから調整してください。
+  external_ntp:
+    name: 外部NTPサーバー
+    description: GPS基準クロックと併せてchronyが選択に使用するサーバーです。1つ以上必要です。
+  log_measurements:
+    name: 測定値をログに記録
+    description: chronyのtracking、measurements、statisticsログを/data/logへ出力します。オフセット調整時に有用です。

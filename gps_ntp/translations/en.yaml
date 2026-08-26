@@ -1,0 +1,31 @@
+configuration:
+  gps_device:
+    name: GPS serial device
+    description: Serial device gpsd reads NMEA from. Prefer a stable /dev/serial/by-id/... path over /dev/ttyUSB0.
+  pps_device:
+    name: PPS device
+    description: Device providing the pulse-per-second signal, usually /dev/pps0. The host must expose it; this add-on cannot create one.
+  use_pps:
+    name: Use PPS
+    description: Discipline the clock with the pulse-per-second signal in addition to NMEA.
+  pps_via_gpsd:
+    name: PPS through gpsd
+    description: Read PPS from the gpsd SHM 1 segment. Turn this off to let chrony read the PPS device directly and lock it to the NMEA source.
+  gpsd_remote_access:
+    name: gpsd remote access
+    description: Let gpsd accept TCP clients such as xgps. Also assign host port 2947 in the Network section.
+  allow_network:
+    name: Allowed network
+    description: Subnet allowed to query this NTP server, for example 192.168.10.0/24. Do not expose UDP port 123 to the internet.
+  nmea_offset:
+    name: NMEA offset
+    description: Seconds added to the NMEA reference clock to compensate for serial latency, between -10 and 10. Tune it only after the fix and PPS are stable.
+  pps_offset:
+    name: PPS offset
+    description: Seconds added to the PPS reference clock, between -1 and 1. Tune it only after collecting measurements over several hours.
+  external_ntp:
+    name: External NTP servers
+    description: Servers chrony selects from alongside the GPS reference clocks. At least one is required.
+  log_measurements:
+    name: Log measurements
+    description: Write chrony tracking, measurement and statistics logs to /data/log. Useful when tuning the offsets.
