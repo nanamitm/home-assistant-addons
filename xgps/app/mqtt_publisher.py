@@ -81,24 +81,28 @@ class MqttPublisher:
         kwargs: dict[str, Any] = {"client_id": f"xgps-web-{self.device_id}", "clean_session": True}
         if hasattr(mqtt, "CallbackAPIVersion"):
             kwargs["callback_api_version"] = mqtt.CallbackAPIVersion.VERSION2
-        self._client = mqtt.Client(**kwargs)
+        client = mqtt.Client(**kwargs)
         if self.username:
-            self._client.username_pw_set(self.username, self.password)
-        self._client.will_set(self.availability_topic, "offline", qos=1, retain=True)
-        self._client.on_connect = self._on_connect
-        self._client.on_disconnect = self._on_disconnect
+            client.username_pw_set(self.username, self.password)
+        client.will_set(self.availability_topic, "offline", qos=1, retain=True)
+        client.on_connect = self._on_connect
+        client.on_disconnect = self._on_disconnect
         LOGGER.info("Connecting to MQTT broker at %s:%s", self.host, self.port)
-        self._client.connect_async(self.host, self.port, keepalive=60)
-        self._client.loop_start()
+        with self._lock:
+            self._client = client
+        client.connect_async(self.host, self.port, keepalive=60)
+        client.loop_start()
 
     def stop(self) -> None:
-        if self._client is None:
+        with self._lock:
+            client = self._client
+            self._client = None
+        if client is None:
             return
         with contextlib.suppress(RuntimeError, ValueError):
-            self._client.publish(self.availability_topic, "offline", qos=1, retain=True).wait_for_publish(timeout=2)
-        self._client.disconnect()
-        self._client.loop_stop()
-        self._client = None
+            client.publish(self.availability_topic, "offline", qos=1, retain=True).wait_for_publish(timeout=2)
+        client.disconnect()
+        client.loop_stop()
 
     def update_status(self, connected: bool, connection_generation: int) -> None:
         self.update(
@@ -197,8 +201,11 @@ class MqttPublisher:
             if not changed - quiet:
                 return
             state = deepcopy(self._state)
-        if self._client is not None and self._client.is_connected():
-            self._publish_state(state)
+            # Read the client under the same lock stop() clears it under, so a
+            # shutdown on another thread cannot pull it away mid-publish.
+            client = self._client
+        if client is not None and client.is_connected():
+            self._publish_state(client, state)
 
     def _on_connect(self, client: mqtt.Client, _userdata: Any, _flags: Any, reason_code: Any, _properties: Any = None) -> None:
         if reason_code != 0:
@@ -209,7 +216,7 @@ class MqttPublisher:
         client.publish(self.availability_topic, "online", qos=1, retain=True)
         with self._lock:
             state = deepcopy(self._state)
-        self._publish_state(state)
+        self._publish_state(client, state)
 
     def _on_disconnect(self, _client: mqtt.Client, _userdata: Any, *args: Any) -> None:
         # Paho 1.x passes only the result code; Paho 2.x also passes flags and properties.
@@ -217,9 +224,8 @@ class MqttPublisher:
         if reason_code != 0:
             LOGGER.warning("Unexpected MQTT disconnection: %s", reason_code)
 
-    def _publish_state(self, state: dict[str, Any]) -> None:
-        assert self._client is not None
-        self._client.publish(self.state_topic, json.dumps(state, separators=(",", ":")), qos=1, retain=True)
+    def _publish_state(self, client: mqtt.Client, state: dict[str, Any]) -> None:
+        client.publish(self.state_topic, json.dumps(state, separators=(",", ":")), qos=1, retain=True)
         if self.tracker_enabled and "latitude" in state and "longitude" in state:
             # No "state" key on purpose. A device tracker state topic sets
             # location_name in Home Assistant, and a location_name always wins
@@ -231,7 +237,7 @@ class MqttPublisher:
                 "longitude": state["longitude"],
                 "gps_accuracy": state.get("horizontal_error", 0),
             }
-            self._client.publish(self.tracker_topic, json.dumps(tracker, separators=(",", ":")), qos=1, retain=True)
+            client.publish(self.tracker_topic, json.dumps(tracker, separators=(",", ":")), qos=1, retain=True)
 
     def _publish_discovery(self, client: mqtt.Client) -> None:
         device = {
