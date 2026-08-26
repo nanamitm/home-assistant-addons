@@ -53,7 +53,7 @@ jobs:
               assert set(build["build_from"]) == set(config["arch"]), addon
 
           # Every option offered in the interface needs a name and a description.
-          for addon in ("sdrconnect", "xgps"):
+          for addon in ADDONS:
               options = set(yaml.safe_load(open(f"{addon}/config.yaml"))["schema"])
               for language in ("en", "ja"):
                   translated = yaml.safe_load(
