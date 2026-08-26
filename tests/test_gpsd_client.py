@@ -11,6 +11,41 @@ def test_gpsd_watch_and_packet_delivery():
     asyncio.run(_exercise_client())
 
 
+def test_silent_socket_times_out_and_reconnects():
+    async def exercise():
+        done = asyncio.Event()
+
+        async def silent_gpsd(reader, writer):
+            await reader.readline()
+            await done.wait()
+
+        async def handler(_packet, _raw):
+            pass
+
+        server = await asyncio.start_server(silent_gpsd, "127.0.0.1", 0)
+        port = server.sockets[0].getsockname()[1]
+        client = GpsdClient("127.0.0.1", port, 60, handler, read_timeout=0.05)
+        task = asyncio.create_task(client.run())
+        for _ in range(100):
+            if client.status_code == "read_timeout":
+                break
+            await asyncio.sleep(0.01)
+        await client.stop()
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        done.set()
+        server.close()
+        await server.wait_closed()
+
+        assert client.status_code == "read_timeout"
+        assert client.connected is False
+
+    asyncio.run(exercise())
+
+
 def test_manual_reconnect_sets_state():
     async def exercise():
         async def handler(_packet, _raw):
