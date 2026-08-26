@@ -201,8 +201,12 @@ class MqttPublisher:
         assert self._client is not None
         self._client.publish(self.state_topic, json.dumps(state, separators=(",", ":")), qos=1, retain=True)
         if self.tracker_enabled and "latitude" in state and "longitude" in state:
+            # No "state" key on purpose. A device tracker state topic sets
+            # location_name in Home Assistant, and a location_name always wins
+            # over zone detection, so publishing "not_home" would pin the
+            # tracker outside every zone. Publishing coordinates alone lets
+            # Home Assistant resolve the zone itself.
             tracker = {
-                "state": "not_home",
                 "latitude": state["latitude"],
                 "longitude": state["longitude"],
                 "gps_accuracy": state.get("horizontal_error", 0),
@@ -260,10 +264,8 @@ class MqttPublisher:
             topic = f"{self.discovery_prefix}/{component}/{self.device_id}/{object_id}/config"
             client.publish(topic, json.dumps(config, separators=(",", ":")), qos=1, retain=True)
         if self.tracker_enabled:
-            tracker_config = common | {
-                "state_topic": self.tracker_topic,
+            tracker_config = {key: value for key, value in common.items() if key != "state_topic"} | {
                 "json_attributes_topic": self.tracker_topic,
-                "value_template": "{{ value_json.state }}",
                 "source_type": "gps",
                 "name": "Position",
                 "unique_id": f"{self.device_id}_position",

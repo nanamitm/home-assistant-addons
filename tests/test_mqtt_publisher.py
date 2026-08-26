@@ -159,4 +159,21 @@ def test_tracker_is_opt_in(monkeypatch):
     result = publisher(monkeypatch)
     result.update_tpv({"mode": 2, "lat": 35.1, "lon": 139.2, "eph": 3.0}, "now")
     tracker = next(json.loads(payload) for topic, payload, _, _ in result._client.messages if topic.endswith("/tracker"))
-    assert tracker == {"state": "not_home", "latitude": 35.1, "longitude": 139.2, "gps_accuracy": 3.0}
+    assert tracker == {"latitude": 35.1, "longitude": 139.2, "gps_accuracy": 3.0}
+
+
+def test_tracker_discovery_leaves_zone_detection_to_home_assistant(monkeypatch):
+    monkeypatch.setenv("DEVICE_TRACKER", "true")
+    result = publisher(monkeypatch)
+    result._publish_discovery(result._client)
+
+    config = next(
+        json.loads(payload)
+        for topic, payload, _, _ in result._client.messages
+        if topic.endswith("/device_tracker/roof_gps/position/config")
+    )
+    # A state topic would set location_name, which overrides zone detection.
+    assert "state_topic" not in config
+    assert "value_template" not in config
+    assert config["json_attributes_topic"] == "xgps_web/roof_gps/tracker"
+    assert config["source_type"] == "gps"
