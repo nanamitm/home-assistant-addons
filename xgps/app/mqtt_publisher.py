@@ -241,8 +241,12 @@ class MqttPublisher:
             tracker = {
                 "latitude": state["latitude"],
                 "longitude": state["longitude"],
-                "gps_accuracy": state.get("horizontal_error", 0),
             }
+            # Omit the accuracy rather than reporting a fabricated 0, which
+            # would read as a perfect fix to anything consuming this topic.
+            accuracy = state.get("horizontal_error")
+            if isinstance(accuracy, (int, float)):
+                tracker["gps_accuracy"] = accuracy
             client.publish(self.tracker_topic, json.dumps(tracker, separators=(",", ":")), qos=1, retain=True)
 
     def _publish_discovery(self, client: mqtt.Client) -> None:

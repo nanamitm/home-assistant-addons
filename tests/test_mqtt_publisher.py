@@ -203,6 +203,14 @@ def test_tracker_is_opt_in(monkeypatch):
     assert tracker == {"latitude": 35.1, "longitude": 139.2, "gps_accuracy": 3.0}
 
 
+def test_tracker_omits_unknown_accuracy(monkeypatch):
+    monkeypatch.setenv("DEVICE_TRACKER", "true")
+    result = publisher(monkeypatch)
+    result.update_tpv({"mode": 2, "lat": 35.1, "lon": 139.2}, "now")
+    tracker = next(json.loads(payload) for topic, payload, _, _ in result._client.messages if topic.endswith("/tracker"))
+    assert tracker == {"latitude": 35.1, "longitude": 139.2}
+
+
 def test_tracker_discovery_leaves_zone_detection_to_home_assistant(monkeypatch):
     monkeypatch.setenv("DEVICE_TRACKER", "true")
     result = publisher(monkeypatch)
