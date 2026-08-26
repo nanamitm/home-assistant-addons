@@ -7,17 +7,20 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "xgps" / "app"))
 from gpsd_client import GpsdClient
 
 
-def test_gpsd_watch_and_packet_delivery():
-    asyncio.run(_exercise_client())
+def test_gpsd_watch_and_packet_delivery(run_async):
+    run_async(_exercise_client())
 
 
-def test_silent_socket_times_out_and_reconnects():
+def test_silent_socket_times_out_and_reconnects(run_async):
     async def exercise():
         done = asyncio.Event()
 
         async def silent_gpsd(reader, writer):
-            await reader.readline()
-            await done.wait()
+            try:
+                await reader.readline()
+                await done.wait()
+            finally:
+                writer.close()
 
         async def handler(_packet, _raw):
             pass
@@ -43,28 +46,32 @@ def test_silent_socket_times_out_and_reconnects():
         assert client.status_code == "read_timeout"
         assert client.connected is False
 
-    asyncio.run(exercise())
+    run_async(exercise())
 
 
-def test_handler_error_does_not_end_the_client():
+def test_handler_error_does_not_end_the_client(run_async):
     async def exercise():
         attempts = []
 
         async def failing_gpsd(reader, writer):
-            attempts.append(await reader.readline())
-            writer.write(b'{"class":"SKY"}\n')
-            await writer.drain()
-            await asyncio.sleep(0.2)
+            try:
+                attempts.append(await reader.readline())
+                writer.write(b'{"class":"SKY"}\n')
+                await writer.drain()
+            finally:
+                writer.close()
 
         async def handler(_packet, _raw):
             raise ValueError("handler is broken")
 
         server = await asyncio.start_server(failing_gpsd, "127.0.0.1", 0)
         port = server.sockets[0].getsockname()[1]
-        client = GpsdClient("127.0.0.1", port, 0.01, handler)
+        client = GpsdClient("127.0.0.1", port, 0.05, handler)
         task = asyncio.create_task(client.run())
+        statuses = set()
         for _ in range(200):
-            if len(attempts) >= 2:
+            statuses.add(client.status_code)
+            if len(attempts) >= 2 and "client_error" in statuses:
                 break
             await asyncio.sleep(0.01)
         await client.stop()
@@ -76,14 +83,14 @@ def test_handler_error_does_not_end_the_client():
         server.close()
         await server.wait_closed()
 
-        # run() survived the handler error and reconnected instead of ending.
+        # run() reported the handler error and reconnected instead of ending.
+        assert "client_error" in statuses
         assert len(attempts) >= 2
-        assert client.status_code == "client_error"
 
-    asyncio.run(exercise())
+    run_async(exercise())
 
 
-def test_manual_reconnect_sets_state():
+def test_manual_reconnect_sets_state(run_async):
     async def exercise():
         async def handler(_packet, _raw):
             pass
@@ -93,7 +100,7 @@ def test_manual_reconnect_sets_state():
         assert client.status_code == "reconnecting"
         assert client._reconnect.is_set()
 
-    asyncio.run(exercise())
+    run_async(exercise())
 
 
 async def _exercise_client():

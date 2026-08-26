@@ -19,7 +19,7 @@ class FakeMqtt:
         pass
 
 
-def test_sky_dop_is_in_live_message_and_snapshot():
+def test_sky_dop_is_in_live_message_and_snapshot(run_async):
     async def exercise():
         service = XgpsService()
         service.mqtt = FakeMqtt()
@@ -42,10 +42,10 @@ def test_sky_dop_is_in_live_message_and_snapshot():
         assert service.snapshot()["hdop"] == 0.5
         assert service.snapshot()["vdop"] == 0.9
 
-    asyncio.run(exercise())
+    run_async(exercise())
 
 
-def test_status_loop_survives_a_broadcast_failure():
+def test_status_loop_survives_a_broadcast_failure(run_async):
     async def exercise():
         service = XgpsService()
         service.mqtt = FakeMqtt()
@@ -70,10 +70,10 @@ def test_status_loop_survives_a_broadcast_failure():
             pass
         assert calls
 
-    asyncio.run(exercise())
+    run_async(exercise())
 
 
-def test_shutdown_is_not_reported_as_a_failure():
+def test_shutdown_is_not_reported_as_a_failure(run_async):
     async def exercise():
         service = XgpsService()
         service.mqtt = FakeMqtt()
@@ -87,10 +87,10 @@ def test_shutdown_is_not_reported_as_a_failure():
         await asyncio.sleep(0)
         assert service.failed_task is None
 
-    asyncio.run(exercise())
+    run_async(exercise())
 
 
-def test_health_fails_after_a_background_task_dies():
+def test_health_fails_after_a_background_task_dies(run_async):
     async def exercise():
         service = XgpsService()
 
@@ -103,7 +103,7 @@ def test_health_fails_after_a_background_task_dies():
         await asyncio.sleep(0)
         assert service.failed_task == "gpsd"
 
-    asyncio.run(exercise())
+    run_async(exercise())
 
 
 class StalledClient:
@@ -128,7 +128,7 @@ class FastClient:
         pass
 
 
-def test_a_stalled_client_is_dropped_without_blocking_the_others(monkeypatch):
+def test_a_stalled_client_is_dropped_without_blocking_the_others(monkeypatch, run_async):
     async def exercise():
         monkeypatch.setattr(server, "SEND_TIMEOUT", 0.05)
         service = XgpsService()
@@ -142,10 +142,10 @@ def test_a_stalled_client_is_dropped_without_blocking_the_others(monkeypatch):
         await asyncio.sleep(0)
         assert stalled.closed is True
 
-    asyncio.run(exercise())
+    run_async(exercise())
 
 
-def test_index_pins_assets_to_the_ingress_path():
+def test_index_pins_assets_to_the_ingress_path(run_async):
     async def exercise():
         class FakeRequest:
             headers = {"X-Ingress-Path": "/api/hassio_ingress/abc123"}
@@ -159,4 +159,4 @@ def test_index_pins_assets_to_the_ingress_path():
 
         assert "<base" not in (await server.index(BareRequest())).text
 
-    asyncio.run(exercise())
+    run_async(exercise())
