@@ -126,3 +126,20 @@ def test_a_stalled_client_is_dropped_without_blocking_the_others(monkeypatch):
         assert stalled.closed is True
 
     asyncio.run(exercise())
+
+
+def test_index_pins_assets_to_the_ingress_path():
+    async def exercise():
+        class FakeRequest:
+            headers = {"X-Ingress-Path": "/api/hassio_ingress/abc123"}
+
+        response = await server.index(FakeRequest())
+        assert '<base href="/api/hassio_ingress/abc123/">' in response.text
+        assert response.content_type == "text/html"
+
+        class BareRequest:
+            headers = {}
+
+        assert "<base" not in (await server.index(BareRequest())).text
+
+    asyncio.run(exercise())

@@ -7,6 +7,7 @@ import json
 import logging
 import os
 from datetime import datetime, timezone
+from html import escape
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,7 @@ from mqtt_publisher import DOP_FIELDS, MqttPublisher, env_bool, positioning_qual
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
 LOGGER = logging.getLogger("xgps")
 STATIC_DIR = Path(__file__).with_name("static")
+INDEX_HTML = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
 # A browser that stops reading must not hold the gpsd read loop open forever.
 SEND_TIMEOUT = 5.0
 
@@ -182,8 +184,19 @@ class XgpsService:
 service = XgpsService()
 
 
-async def index(_request: web.Request) -> web.FileResponse:
-    return web.FileResponse(STATIC_DIR / "index.html")
+async def index(request: web.Request) -> web.Response:
+    """Serve the page with a <base> element pinned to the ingress path.
+
+    Ingress serves the add-on under a per-session path, and the relative asset
+    URLs in the page resolve against the request path. Requested without its
+    trailing slash, that path loses its last segment and every asset 404s. The
+    Supervisor tells us the real base in X-Ingress-Path, so use it.
+    """
+    ingress_path = request.headers.get("X-Ingress-Path", "").rstrip("/")
+    html = INDEX_HTML
+    if ingress_path:
+        html = html.replace("<head>", f'<head>\n  <base href="{escape(ingress_path)}/">', 1)
+    return web.Response(text=html, content_type="text/html")
 
 
 async def health(_request: web.Request) -> web.Response:
