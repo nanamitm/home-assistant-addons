@@ -111,9 +111,11 @@ def test_satellite_counts_by_system(monkeypatch):
                 {"gnssid": 1, "used": True},
                 {"gnssid": 2, "used": True},
                 {"gnssid": 3, "used": True},
+                {"gnssid": 4, "used": False},
                 {"gnssid": 5, "used": True},
                 {"gnssid": 6, "used": True},
                 {"gnssid": 6, "used": False},
+                {"gnssid": 7, "used": True},
             ]
         }
     )
@@ -122,8 +124,10 @@ def test_satellite_counts_by_system(monkeypatch):
     assert result._state["sbas_satellites_visible"] == 2
     assert result._state["galileo_satellites_used"] == 1
     assert result._state["beidou_satellites_used"] == 1
+    assert result._state["imes_satellites_visible"] == 1
     assert result._state["qzss_satellites_used"] == 1
     assert result._state["glonass_satellites_used"] == 1
+    assert result._state["irnss_satellites_used"] == 1
 
 
 def test_positioning_quality_thresholds(monkeypatch):
@@ -202,7 +206,7 @@ def test_discovery_groups_entities_under_one_device(monkeypatch):
     result._publish_discovery(client)
 
     configs = [(topic, json.loads(payload)) for topic, payload, _, _ in client.messages if payload]
-    assert len(configs) == 28
+    assert len(configs) == 30
     connection = next(config for topic, config in configs if "/binary_sensor/" in topic)
     assert connection["unique_id"] == "roof_gps_connection"
     assert connection["device"]["identifiers"] == ["roof_gps"]

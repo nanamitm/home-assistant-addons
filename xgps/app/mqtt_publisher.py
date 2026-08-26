@@ -19,13 +19,18 @@ DATA_STALE_AFTER = 15
 # a slow cadence so an outage cannot republish the whole state document every
 # second; data_stale still changes the moment the data goes stale.
 DATA_AGE_INTERVAL = 30.0
+# gnssid, and whether the count is restricted to satellites used in the fix.
+# SBAS and IMES do not contribute to a position solution, so those are counted
+# as visible. Keyed in gnssid order, matching the systems the interface lists.
 SYSTEM_COUNTS = {
     "gps_satellites_used": (0, True),
     "sbas_satellites_visible": (1, False),
     "galileo_satellites_used": (2, True),
     "beidou_satellites_used": (3, True),
+    "imes_satellites_visible": (4, False),
     "qzss_satellites_used": (5, True),
     "glonass_satellites_used": (6, True),
+    "irnss_satellites_used": (7, True),
 }
 
 
@@ -296,8 +301,10 @@ class MqttPublisher:
             "sbas_satellites_visible": ("sensor", {"name": "SBAS satellites visible", "value_template": "{{ value_json.sbas_satellites_visible }}", "state_class": "measurement", "icon": "mdi:satellite-variant"}),
             "galileo_satellites_used": ("sensor", {"name": "Galileo satellites used", "value_template": "{{ value_json.galileo_satellites_used }}", "state_class": "measurement", "icon": "mdi:satellite-uplink"}),
             "beidou_satellites_used": ("sensor", {"name": "BeiDou satellites used", "value_template": "{{ value_json.beidou_satellites_used }}", "state_class": "measurement", "icon": "mdi:satellite-uplink"}),
+            "imes_satellites_visible": ("sensor", {"name": "IMES satellites visible", "value_template": "{{ value_json.imes_satellites_visible }}", "state_class": "measurement", "icon": "mdi:satellite-variant"}),
             "qzss_satellites_used": ("sensor", {"name": "QZSS satellites used", "value_template": "{{ value_json.qzss_satellites_used }}", "state_class": "measurement", "icon": "mdi:satellite-uplink"}),
             "glonass_satellites_used": ("sensor", {"name": "GLONASS satellites used", "value_template": "{{ value_json.glonass_satellites_used }}", "state_class": "measurement", "icon": "mdi:satellite-uplink"}),
+            "irnss_satellites_used": ("sensor", {"name": "IRNSS satellites used", "value_template": "{{ value_json.irnss_satellites_used }}", "state_class": "measurement", "icon": "mdi:satellite-uplink"}),
             "latitude": ("sensor", {"name": "Latitude", "value_template": "{{ value_json.latitude | default(none) }}", "unit_of_measurement": "°", "icon": "mdi:latitude"}),
             "longitude": ("sensor", {"name": "Longitude", "value_template": "{{ value_json.longitude | default(none) }}", "unit_of_measurement": "°", "icon": "mdi:longitude"}),
             "altitude": ("sensor", {"name": "Altitude", "value_template": "{{ value_json.altitude | default(none) }}", "device_class": "distance", "unit_of_measurement": "m", "state_class": "measurement"}),
