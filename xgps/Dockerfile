@@ -8,7 +8,8 @@ ENV XGPS_VERSION=${BUILD_VERSION}
 
 LABEL io.hass.type="app"
 
-RUN apk add --no-cache nginx python3 py3-aiohttp py3-paho-mqtt
+# ca-certificates backs the default TLS trust store used for MQTT over TLS.
+RUN apk add --no-cache ca-certificates nginx python3 py3-aiohttp py3-paho-mqtt
 
 COPY app /opt/xgps
 COPY nginx.conf /etc/nginx/nginx.conf

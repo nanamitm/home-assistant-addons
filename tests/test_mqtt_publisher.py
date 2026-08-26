@@ -33,6 +33,37 @@ def publisher(monkeypatch):
     return result
 
 
+def test_tls_is_enabled_from_the_environment(monkeypatch):
+    calls = []
+
+    class RecordingClient(FakeClient):
+        def tls_set(self):
+            calls.append("tls_set")
+
+        def username_pw_set(self, *_args):
+            pass
+
+        def will_set(self, *_args, **_kwargs):
+            pass
+
+        def connect_async(self, *_args, **_kwargs):
+            pass
+
+        def loop_start(self):
+            pass
+
+    monkeypatch.setenv("MQTT_ENABLED", "true")
+    monkeypatch.setenv("MQTT_SSL", "true")
+    monkeypatch.setattr("mqtt_publisher.mqtt.Client", lambda **_kwargs: RecordingClient())
+    MqttPublisher().start()
+    assert calls == ["tls_set"]
+
+    calls.clear()
+    monkeypatch.setenv("MQTT_SSL", "false")
+    MqttPublisher().start()
+    assert calls == []
+
+
 def test_state_combines_sky_and_tpv(monkeypatch):
     result = publisher(monkeypatch)
     result.update_status(True, 3)

@@ -18,6 +18,7 @@ if bashio::config.true 'mqtt_enabled'; then
         export MQTT_PORT="$(bashio::config 'mqtt_port' '1883')"
         export MQTT_USER="$(bashio::config 'mqtt_user' '')"
         export MQTT_PASS="$(bashio::config 'mqtt_password' '')"
+        export MQTT_SSL="$(bashio::config 'mqtt_ssl' 'false')"
     else
         if ! bashio::services.available 'mqtt'; then
             bashio::log.fatal "MQTT entities are enabled, but no MQTT service was found."
@@ -29,6 +30,8 @@ if bashio::config.true 'mqtt_enabled'; then
         export MQTT_PORT="$(bashio::services mqtt 'port')"
         export MQTT_USER="$(bashio::services mqtt 'username')"
         export MQTT_PASS="$(bashio::services mqtt 'password')"
+        # The Supervisor knows whether its broker listens with TLS.
+        export MQTT_SSL="$(bashio::services mqtt 'ssl')"
     fi
 fi
 

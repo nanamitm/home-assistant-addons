@@ -58,6 +58,7 @@ class MqttPublisher:
         self.port = int(os.getenv("MQTT_PORT", "1883"))
         self.username = os.getenv("MQTT_USER", "")
         self.password = os.getenv("MQTT_PASS", "")
+        self.tls = env_bool("MQTT_SSL")
         self.discovery_prefix = os.getenv("DISCOVERY_PREFIX", "homeassistant").strip("/")
         self.device_name = os.getenv("DEVICE_NAME", "xgps Web")
         self.device_id = os.getenv("DEVICE_ID", "xgps_web")
@@ -89,12 +90,15 @@ class MqttPublisher:
         if hasattr(mqtt, "CallbackAPIVersion"):
             kwargs["callback_api_version"] = mqtt.CallbackAPIVersion.VERSION2
         client = mqtt.Client(**kwargs)
+        if self.tls:
+            # Default context: system trust store, hostname verification on.
+            client.tls_set()
         if self.username:
             client.username_pw_set(self.username, self.password)
         client.will_set(self.availability_topic, "offline", qos=1, retain=True)
         client.on_connect = self._on_connect
         client.on_disconnect = self._on_disconnect
-        LOGGER.info("Connecting to MQTT broker at %s:%s", self.host, self.port)
+        LOGGER.info("Connecting to MQTT broker at %s:%s (TLS %s)", self.host, self.port, "on" if self.tls else "off")
         with self._lock:
             self._client = client
         client.connect_async(self.host, self.port, keepalive=60)

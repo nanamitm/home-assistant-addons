@@ -32,6 +32,9 @@ configuration:
   mqtt_port:
     name: MQTTポート
     description: 外部MQTTブローカーのポートです。
+  mqtt_ssl:
+    name: MQTT TLS
+    description: 外部MQTTブローカーへTLSで接続します。SupervisorのMQTTサービスでは自動判定されます。
   mqtt_user:
     name: MQTTユーザー名
     description: 外部MQTTブローカーのユーザー名です。

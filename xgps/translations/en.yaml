@@ -32,6 +32,9 @@ configuration:
   mqtt_port:
     name: MQTT port
     description: External MQTT broker port.
+  mqtt_ssl:
+    name: MQTT TLS
+    description: Connect to the external MQTT broker with TLS. The Supervisor MQTT service is detected automatically.
   mqtt_user:
     name: MQTT username
     description: External MQTT broker username.

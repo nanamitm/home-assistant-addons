@@ -40,5 +40,6 @@ schema:
   discovery_prefix: str?
   mqtt_host: str?
   mqtt_port: port?
+  mqtt_ssl: bool?
   mqtt_user: str?
   mqtt_password: password?
