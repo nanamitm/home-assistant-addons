@@ -20,6 +20,7 @@ jobs:
           python - <<'PY'
           import yaml
           config = yaml.safe_load(open("xgps/config.yaml"))
+          build = yaml.safe_load(open("xgps/build.yaml"))
           assert config["slug"] == "xgps_web"
           assert config["ingress"] is True
           assert config["watchdog"] == "http://[HOST]:[PORT:8099]/health"
@@ -27,6 +28,14 @@ jobs:
           assert config["services"] == ["mqtt:want"]
           assert config["options"]["mqtt_enabled"] is False
           assert config["stage"] == "stable"
+          # Every published architecture needs a base image to build from.
+          assert set(build["build_from"]) == set(config["arch"])
+          options = set(config["schema"])
+          for language in ("en", "ja"):
+              translated = yaml.safe_load(
+                  open(f"xgps/translations/{language}.yaml")
+              )["configuration"]
+              assert set(translated) == options, language
           dashboard = yaml.safe_load(open("xgps/examples/dashboard.yaml"))
           automations = yaml.safe_load(open("xgps/examples/automations.yaml"))
           assert dashboard["views"][0]["cards"]
@@ -48,12 +57,12 @@ jobs:
               len(args[key]) == 64 and int(args[key], 16) >= 0
               for key in ("SDRCONNECT_SHA256_AMD64", "SDRCONNECT_SHA256_AARCH64")
           )
-          options = set(config["schema"])
+          sdrconnect_options = set(config["schema"])
           for language in ("en", "ja"):
               translated = yaml.safe_load(
                   open(f"sdrconnect/translations/{language}.yaml")
               )["configuration"]
-              assert set(translated) == options, language
+              assert set(translated) == sdrconnect_options, language
           PY
 
       - name: Check add-on shell scripts

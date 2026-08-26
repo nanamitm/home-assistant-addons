@@ -1,4 +1,5 @@
-FROM ghcr.io/home-assistant/base:3.22
+ARG BUILD_FROM
+FROM ${BUILD_FROM}
 
 LABEL io.hass.type="app"
 
