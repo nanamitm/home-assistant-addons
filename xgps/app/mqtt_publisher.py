@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import threading
+import time
 import contextlib
 from copy import deepcopy
 from typing import Any
@@ -13,13 +14,23 @@ import paho.mqtt.client as mqtt
 
 LOGGER = logging.getLogger(__name__)
 DOP_FIELDS = ("hdop", "pdop", "vdop", "gdop")
+DATA_STALE_AFTER = 15
+# data_age ticks once a second for as long as gpsd is unreachable. Refresh it on
+# a slow cadence so an outage cannot republish the whole state document every
+# second; data_stale still changes the moment the data goes stale.
+DATA_AGE_INTERVAL = 30.0
+# gnssid, and whether the count is restricted to satellites used in the fix.
+# SBAS and IMES do not contribute to a position solution, so those are counted
+# as visible. Keyed in gnssid order, matching the systems the interface lists.
 SYSTEM_COUNTS = {
     "gps_satellites_used": (0, True),
     "sbas_satellites_visible": (1, False),
     "galileo_satellites_used": (2, True),
     "beidou_satellites_used": (3, True),
+    "imes_satellites_visible": (4, False),
     "qzss_satellites_used": (5, True),
     "glonass_satellites_used": (6, True),
+    "irnss_satellites_used": (7, True),
 }
 
 
@@ -47,10 +58,12 @@ class MqttPublisher:
         self.port = int(os.getenv("MQTT_PORT", "1883"))
         self.username = os.getenv("MQTT_USER", "")
         self.password = os.getenv("MQTT_PASS", "")
+        self.tls = env_bool("MQTT_SSL")
         self.discovery_prefix = os.getenv("DISCOVERY_PREFIX", "homeassistant").strip("/")
         self.device_name = os.getenv("DEVICE_NAME", "xgps Web")
         self.device_id = os.getenv("DEVICE_ID", "xgps_web")
         self.tracker_enabled = env_bool("DEVICE_TRACKER")
+        self.sw_version = os.getenv("XGPS_VERSION", "").strip()
         self.base_topic = f"xgps_web/{self.device_id}"
         self.state_topic = f"{self.base_topic}/state"
         self.availability_topic = f"{self.base_topic}/availability"
@@ -66,6 +79,8 @@ class MqttPublisher:
         }
         self._lock = threading.Lock()
         self._client: mqtt.Client | None = None
+        self._data_age_published_at = 0.0
+        self._sky_reports_hdop = False
 
     def start(self) -> None:
         if not self.enabled:
@@ -74,24 +89,31 @@ class MqttPublisher:
         kwargs: dict[str, Any] = {"client_id": f"xgps-web-{self.device_id}", "clean_session": True}
         if hasattr(mqtt, "CallbackAPIVersion"):
             kwargs["callback_api_version"] = mqtt.CallbackAPIVersion.VERSION2
-        self._client = mqtt.Client(**kwargs)
+        client = mqtt.Client(**kwargs)
+        if self.tls:
+            # Default context: system trust store, hostname verification on.
+            client.tls_set()
         if self.username:
-            self._client.username_pw_set(self.username, self.password)
-        self._client.will_set(self.availability_topic, "offline", qos=1, retain=True)
-        self._client.on_connect = self._on_connect
-        self._client.on_disconnect = self._on_disconnect
-        LOGGER.info("Connecting to MQTT broker at %s:%s", self.host, self.port)
-        self._client.connect_async(self.host, self.port, keepalive=60)
-        self._client.loop_start()
+            client.username_pw_set(self.username, self.password)
+        client.will_set(self.availability_topic, "offline", qos=1, retain=True)
+        client.on_connect = self._on_connect
+        client.on_disconnect = self._on_disconnect
+        LOGGER.info("Connecting to MQTT broker at %s:%s (TLS %s)", self.host, self.port, "on" if self.tls else "off")
+        with self._lock:
+            self._client = client
+        client.connect_async(self.host, self.port, keepalive=60)
+        client.loop_start()
 
     def stop(self) -> None:
-        if self._client is None:
+        with self._lock:
+            client = self._client
+            self._client = None
+        if client is None:
             return
         with contextlib.suppress(RuntimeError, ValueError):
-            self._client.publish(self.availability_topic, "offline", qos=1, retain=True).wait_for_publish(timeout=2)
-        self._client.disconnect()
-        self._client.loop_stop()
-        self._client = None
+            client.publish(self.availability_topic, "offline", qos=1, retain=True).wait_for_publish(timeout=2)
+        client.disconnect()
+        client.loop_stop()
 
     def update_status(self, connected: bool, connection_generation: int) -> None:
         self.update(
@@ -102,11 +124,16 @@ class MqttPublisher:
         )
 
     def update_diagnostics(self, data_age: int | None) -> None:
+        now = time.monotonic()
+        due = now - self._data_age_published_at >= DATA_AGE_INTERVAL
+        if due:
+            self._data_age_published_at = now
         self.update(
             {
                 "data_age": data_age,
-                "data_stale": data_age is None or data_age > 15,
-            }
+                "data_stale": data_age is None or data_age > DATA_STALE_AFTER,
+            },
+            quiet=frozenset() if due else frozenset({"data_age"}),
         )
 
     def update_device(self, device: dict[str, Any]) -> None:
@@ -142,6 +169,8 @@ class MqttPublisher:
             value = sky.get(field)
             if isinstance(value, (int, float)):
                 values[field] = value
+                if field == "hdop":
+                    self._sky_reports_hdop = True
         if "pdop" in values:
             values["positioning_quality"] = positioning_quality(values["pdop"])
             values["quality_degraded"] = values["positioning_quality"] in {"moderate", "poor"}
@@ -155,30 +184,53 @@ class MqttPublisher:
             "fix_unavailable": mode not in {2, 3},
             "last_update": received_at,
         }
+        # Insertion order is the preference order: the first source that
+        # carries a usable value wins, because of the `target not in values`
+        # guard below. Height above mean sea level is what "altitude" means to
+        # a reader, so the ellipsoid height is only a last resort. The web
+        # interface resolves altitude in the same order.
         fields = {
             "lat": "latitude",
             "lon": "longitude",
             "altMSL": "altitude",
             "alt": "altitude",
+            "altHAE": "altitude",
             "speed": "speed",
             "track": "track",
-            "hdop": "hdop",
             "eph": "horizontal_error",
         }
         for source, target in fields.items():
             value = tpv.get(source)
             if isinstance(value, (int, float)) and target not in values:
                 values[target] = value
+        # SKY is the authoritative source for HDOP. Letting TPV write it too
+        # made the two sources overwrite each other on every packet, which
+        # republished the whole state document each time. Fall back to the TPV
+        # copy only for receivers whose SKY reports never carry HDOP, which is
+        # what the web interface does as well.
+        if not self._sky_reports_hdop and isinstance(tpv.get("hdop"), (int, float)):
+            values["hdop"] = tpv["hdop"]
         self.update(values)
 
-    def update(self, values: dict[str, Any]) -> None:
+    def update(self, values: dict[str, Any], quiet: frozenset[str] = frozenset()) -> None:
+        """Merge values into the state document, publishing only when it matters.
+
+        Keys listed in `quiet` are recorded so the next publish carries them,
+        but do not trigger a publish of their own.
+        """
         with self._lock:
-            if all(self._state.get(key) == value for key, value in values.items()):
+            changed = {key for key, value in values.items() if self._state.get(key) != value}
+            if not changed:
                 return
             self._state.update(values)
+            if not changed - quiet:
+                return
             state = deepcopy(self._state)
-        if self._client is not None and self._client.is_connected():
-            self._publish_state(state)
+            # Read the client under the same lock stop() clears it under, so a
+            # shutdown on another thread cannot pull it away mid-publish.
+            client = self._client
+        if client is not None and client.is_connected():
+            self._publish_state(client, state)
 
     def _on_connect(self, client: mqtt.Client, _userdata: Any, _flags: Any, reason_code: Any, _properties: Any = None) -> None:
         if reason_code != 0:
@@ -189,7 +241,7 @@ class MqttPublisher:
         client.publish(self.availability_topic, "online", qos=1, retain=True)
         with self._lock:
             state = deepcopy(self._state)
-        self._publish_state(state)
+        self._publish_state(client, state)
 
     def _on_disconnect(self, _client: mqtt.Client, _userdata: Any, *args: Any) -> None:
         # Paho 1.x passes only the result code; Paho 2.x also passes flags and properties.
@@ -197,33 +249,49 @@ class MqttPublisher:
         if reason_code != 0:
             LOGGER.warning("Unexpected MQTT disconnection: %s", reason_code)
 
-    def _publish_state(self, state: dict[str, Any]) -> None:
-        assert self._client is not None
-        self._client.publish(self.state_topic, json.dumps(state, separators=(",", ":")), qos=1, retain=True)
+    def _publish_state(self, client: mqtt.Client, state: dict[str, Any]) -> None:
+        client.publish(self.state_topic, json.dumps(state, separators=(",", ":")), qos=1, retain=True)
         if self.tracker_enabled and "latitude" in state and "longitude" in state:
+            # No "state" key on purpose. A device tracker state topic sets
+            # location_name in Home Assistant, and a location_name always wins
+            # over zone detection, so publishing "not_home" would pin the
+            # tracker outside every zone. Publishing coordinates alone lets
+            # Home Assistant resolve the zone itself.
             tracker = {
-                "state": "not_home",
                 "latitude": state["latitude"],
                 "longitude": state["longitude"],
-                "gps_accuracy": state.get("horizontal_error", 0),
             }
-            self._client.publish(self.tracker_topic, json.dumps(tracker, separators=(",", ":")), qos=1, retain=True)
+            # Omit the accuracy rather than reporting a fabricated 0, which
+            # would read as a perfect fix to anything consuming this topic.
+            accuracy = state.get("horizontal_error")
+            if isinstance(accuracy, (int, float)):
+                tracker["gps_accuracy"] = accuracy
+            client.publish(self.tracker_topic, json.dumps(tracker, separators=(",", ":")), qos=1, retain=True)
 
     def _publish_discovery(self, client: mqtt.Client) -> None:
-        device = {
+        device: dict[str, Any] = {
             "identifiers": [self.device_id],
             "name": self.device_name,
             "manufacturer": "nanamitm",
             "model": "xgps Web",
-            "sw_version": "1.0.0",
         }
+        origin: dict[str, Any] = {
+            "name": "xgps Web",
+            "support_url": "https://github.com/nanamitm/home-assistant-addons",
+        }
+        # The add-on version comes from the image build rather than a literal
+        # that has to be kept in step with config.yaml by hand. Report nothing
+        # rather than a wrong version when the build did not supply one.
+        if self.sw_version:
+            device["sw_version"] = self.sw_version
+            origin["sw_version"] = self.sw_version
         common = {
             "state_topic": self.state_topic,
             "availability_topic": self.availability_topic,
             "payload_available": "online",
             "payload_not_available": "offline",
             "device": device,
-            "origin": {"name": "xgps Web", "sw_version": "1.0.0", "support_url": "https://github.com/nanamitm/home-assistant-addons"},
+            "origin": origin,
         }
         entities = {
             "connection": ("binary_sensor", {"name": "GPSD connection", "device_class": "connectivity", "value_template": "{{ value_json.gpsd_connected }}", "payload_on": "True", "payload_off": "False"}),
@@ -237,8 +305,10 @@ class MqttPublisher:
             "sbas_satellites_visible": ("sensor", {"name": "SBAS satellites visible", "value_template": "{{ value_json.sbas_satellites_visible }}", "state_class": "measurement", "icon": "mdi:satellite-variant"}),
             "galileo_satellites_used": ("sensor", {"name": "Galileo satellites used", "value_template": "{{ value_json.galileo_satellites_used }}", "state_class": "measurement", "icon": "mdi:satellite-uplink"}),
             "beidou_satellites_used": ("sensor", {"name": "BeiDou satellites used", "value_template": "{{ value_json.beidou_satellites_used }}", "state_class": "measurement", "icon": "mdi:satellite-uplink"}),
+            "imes_satellites_visible": ("sensor", {"name": "IMES satellites visible", "value_template": "{{ value_json.imes_satellites_visible }}", "state_class": "measurement", "icon": "mdi:satellite-variant"}),
             "qzss_satellites_used": ("sensor", {"name": "QZSS satellites used", "value_template": "{{ value_json.qzss_satellites_used }}", "state_class": "measurement", "icon": "mdi:satellite-uplink"}),
             "glonass_satellites_used": ("sensor", {"name": "GLONASS satellites used", "value_template": "{{ value_json.glonass_satellites_used }}", "state_class": "measurement", "icon": "mdi:satellite-uplink"}),
+            "irnss_satellites_used": ("sensor", {"name": "IRNSS satellites used", "value_template": "{{ value_json.irnss_satellites_used }}", "state_class": "measurement", "icon": "mdi:satellite-uplink"}),
             "latitude": ("sensor", {"name": "Latitude", "value_template": "{{ value_json.latitude | default(none) }}", "unit_of_measurement": "°", "icon": "mdi:latitude"}),
             "longitude": ("sensor", {"name": "Longitude", "value_template": "{{ value_json.longitude | default(none) }}", "unit_of_measurement": "°", "icon": "mdi:longitude"}),
             "altitude": ("sensor", {"name": "Altitude", "value_template": "{{ value_json.altitude | default(none) }}", "device_class": "distance", "unit_of_measurement": "m", "state_class": "measurement"}),
@@ -260,10 +330,8 @@ class MqttPublisher:
             topic = f"{self.discovery_prefix}/{component}/{self.device_id}/{object_id}/config"
             client.publish(topic, json.dumps(config, separators=(",", ":")), qos=1, retain=True)
         if self.tracker_enabled:
-            tracker_config = common | {
-                "state_topic": self.tracker_topic,
+            tracker_config = {key: value for key, value in common.items() if key != "state_topic"} | {
                 "json_attributes_topic": self.tracker_topic,
-                "value_template": "{{ value_json.state }}",
                 "source_type": "gps",
                 "name": "Position",
                 "unique_id": f"{self.device_id}_position",

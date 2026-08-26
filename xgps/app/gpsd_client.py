@@ -10,14 +10,27 @@ from typing import Any, Awaitable, Callable
 
 LOGGER = logging.getLogger(__name__)
 PacketHandler = Callable[[dict[str, Any], str], Awaitable[None]]
+# gpsd keeps sending reports while a device is watched, so a long silence means
+# the socket is dead even when the peer never sent a FIN or RST.
+READ_TIMEOUT = 30.0
 
 
 class GpsdClient:
-    def __init__(self, host: str, port: int, reconnect_interval: float, packet_handler: PacketHandler) -> None:
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        reconnect_interval: float,
+        packet_handler: PacketHandler,
+        read_timeout: float = READ_TIMEOUT,
+        keep_raw: bool = True,
+    ) -> None:
         self.host = host
         self.port = port
         self.reconnect_interval = reconnect_interval
         self.packet_handler = packet_handler
+        self.read_timeout = read_timeout
+        self.keep_raw = keep_raw
         self.connected = False
         self.status = "Starting"
         self.status_code = "starting"
@@ -47,6 +60,12 @@ class GpsdClient:
                 self.status = f"gpsd connection error: {err}"
                 self.status_code = "connection_error"
                 LOGGER.warning(self.status)
+            except Exception:
+                # Anything the packet handler raises would otherwise end run()
+                # and silently take the gpsd connection down for good.
+                self.status = "Unexpected gpsd client error"
+                self.status_code = "client_error"
+                LOGGER.exception(self.status)
             finally:
                 self.connected = False
                 if self._writer is not None:
@@ -77,7 +96,15 @@ class GpsdClient:
 
     async def _read_packets(self, reader: asyncio.StreamReader) -> None:
         while not self._stopping.is_set():
-            line_bytes = await reader.readline()
+            try:
+                line_bytes = await asyncio.wait_for(reader.readline(), timeout=self.read_timeout)
+            except asyncio.TimeoutError:
+                # A half-open socket never reports an error, so time the read
+                # out and let run() rebuild the connection.
+                self.status = f"No gpsd data for {self.read_timeout:.0f}s"
+                self.status_code = "read_timeout"
+                LOGGER.warning(self.status)
+                return
             if not line_bytes:
                 self.status = "gpsd closed the connection"
                 self.status_code = "connection_closed"
@@ -85,7 +112,8 @@ class GpsdClient:
             line = line_bytes.decode("utf-8", errors="replace").strip()
             if not line:
                 continue
-            self.raw_lines.append(line)
+            if self.keep_raw:
+                self.raw_lines.append(line)
             try:
                 packet = json.loads(line)
             except json.JSONDecodeError:

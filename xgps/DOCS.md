@@ -26,9 +26,15 @@ use a trusted local network or a secured tunnel.
 | `device_tracker` | `false` | Also publish the GPS position as a device tracker. |
 
 The optional advanced settings `discovery_prefix`, `mqtt_host`, `mqtt_port`,
-`mqtt_user` and `mqtt_password` are available in the Configuration tab. When
-`mqtt_host` is empty, the add-on automatically uses the MQTT service supplied
-by Home Assistant Supervisor.
+`mqtt_ssl`, `mqtt_user` and `mqtt_password` are available in the Configuration
+tab. When `mqtt_host` is empty, the add-on automatically uses the MQTT service
+supplied by Home Assistant Supervisor, including whether that broker expects
+TLS. `mqtt_ssl` applies to an external broker set through `mqtt_host`, and
+verifies the broker certificate against the system trust store.
+
+Anyone with access to Home Assistant can open this add-on and see the receiver
+position, including non-administrators. Raw JSON, when enabled, exposes the
+full gpsd packet stream the same way.
 
 ## Home Assistant entities
 
@@ -49,7 +55,9 @@ The device also exposes diagnostic entities suitable for dashboards and
 automations:
 
 - **Data age** reports whole seconds since the last gpsd packet. **Data stale**
-  becomes a problem after 15 seconds without data.
+  becomes a problem after 15 seconds without data. Data age is refreshed at
+  most every 30 seconds so that an outage does not republish the state
+  document once a second; **Data stale** still changes the moment data stops.
 - **GPSD reconnect count** counts connection attempts after the initial one for
   the current add-on run.
 - **Receiver** reports the gpsd receiver driver or subtype and includes the
@@ -66,15 +74,22 @@ authoritative indication that the add-on itself can reach the broker.
 ### Satellite-system entities
 
 The device publishes separate used-satellite counts for GPS, Galileo, BeiDou,
-QZSS and GLONASS. SBAS is published as a visible-satellite count because SBAS
-signals are useful reception diagnostics even when gpsd does not mark them as
-used in the navigation solution. These values follow the `gnssid` identifiers
+QZSS, GLONASS and IRNSS. SBAS and IMES are published as visible-satellite
+counts because neither contributes to the navigation solution, while their
+signals remain useful reception diagnostics. These values follow the `gnssid` identifiers
 reported by gpsd and update with each satellite-bearing SKY report.
 
 The optional device tracker is disabled by default because the gpsd receiver
 may represent a fixed installation rather than a moving device. Enable it only
 when its coordinates should be used as a tracked location. Disabling it again
-removes its retained Discovery configuration.
+removes its retained Discovery configuration. The tracker publishes
+coordinates only, so Home Assistant resolves the zone itself and the entity
+shows `home`, a zone name or `not_home` as appropriate.
+
+Entity states are published retained, so the last known position and fix stay
+visible after gpsd becomes unreachable. Gate automations that must not act on
+an old position on **Data stale** or **GPSD connection** rather than on the
+position sensors alone.
 
 Changing `device_id` creates a new set of entity unique IDs. Choose it once and
 keep it stable. MQTT credentials are not written to the add-on log.
@@ -112,6 +127,14 @@ are hidden on narrow mobile screens and remain available on wider displays.
 If the status remains disconnected, verify gpsd's listen address, firewall and
 port. A gpsd instance bound only to `127.0.0.1` cannot be reached from this
 add-on.
+
+If gpsd stops sending without closing the connection, the add-on gives up
+after 30 seconds of silence, reports `No gpsd data`, and reconnects.
+
+The Supervisor watchdog polls `/health`. That endpoint stays healthy while
+gpsd itself is unreachable, since a remote outage is not the add-on's fault,
+and reports a failure only when one of the add-on's own background tasks has
+stopped, which restarts the add-on.
 
 ## Attribution
 
