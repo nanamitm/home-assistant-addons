@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.1.0
+
+- Fixed the optional device tracker reporting `not_home` inside every zone.
+- Fixed the gpsd connection hanging forever when a peer went away silently.
+- Fixed unexpected errors in the gpsd and status loops going unlogged and
+  leaving the add-on running with no data.
+- Fixed a crashed background task being invisible to the Supervisor watchdog.
+- Fixed the shutdown path in `run.sh` being skipped, which left nginx running.
+- Stopped republishing the whole MQTT state document once a second during a
+  gpsd outage.
+- Stopped one unresponsive browser from blocking every other viewer and the
+  gpsd read loop behind it.
+- Fixed the web interface and the Home Assistant sensor disagreeing about
+  altitude; both now prefer height above mean sea level.
+- Fixed SKY and TPV overwriting each other's HDOP.
+- Fixed assets failing to load when the ingress page was opened without a
+  trailing slash.
+- Fixed nginx requesting a connection upgrade on ordinary requests.
+- Added MQTT over TLS, automatic for the Supervisor broker and configurable
+  through `mqtt_ssl` for an external one.
+- Added visible IMES and used IRNSS satellite counts.
+- Reported the add-on version from the image build instead of a hardcoded
+  literal.
+- Pinned the base image per architecture with a `build.yaml`.
+
 ## 1.0.0
 
 - Promoted xgps Web from experimental to stable.

@@ -30,6 +30,10 @@ jobs:
           assert config["stage"] == "stable"
           # Every published architecture needs a base image to build from.
           assert set(build["build_from"]) == set(config["arch"])
+          # The release notes must describe the version being released.
+          changelog = open("xgps/CHANGELOG.md").read().splitlines()
+          latest = next(line for line in changelog if line.startswith("## "))
+          assert latest == f"## {config['version']}", latest
           options = set(config["schema"])
           for language in ("en", "ja"):
               translated = yaml.safe_load(
