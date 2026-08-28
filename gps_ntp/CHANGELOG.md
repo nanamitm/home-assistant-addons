@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.3
+
+- Changed the GPS device option to accept arbitrary device paths, including
+  stable `/dev/serial/by-id/...` paths that are not offered by the device
+  selector.
+
 ## 0.1.2
 
 - Added English and Japanese names and descriptions for every option, which
