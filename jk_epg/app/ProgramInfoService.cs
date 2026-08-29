@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using System.Net;
 using System.Web;
 using System.Xml.Linq;
+using jkcnsl_cache.Sources;
 
 namespace jkcnsl_cache;
 
@@ -15,6 +16,7 @@ public sealed class ProgramInfoService : BackgroundService
     private readonly ChannelsStreamBroadcaster _broadcaster;
     private readonly ChannelCatalog _channelCatalog;
     private readonly EpgStorageService _epgStorage;
+    private readonly EpgSourceRegistry _sources;
     private readonly HttpClient _http;
     private readonly TimeZoneInfo _timeZone;
     private readonly string _nhkArea;
@@ -101,13 +103,14 @@ public sealed class ProgramInfoService : BackgroundService
 
     public ProgramInfoService(IConfiguration config, ILogger<ProgramInfoService> logger,
         ChannelsStreamBroadcaster broadcaster, ChannelCatalog channelCatalog,
-        EpgStorageService epgStorage)
+        EpgStorageService epgStorage, EpgSourceRegistry sources)
     {
         _config = config;
         _logger = logger;
         _broadcaster = broadcaster;
         _channelCatalog = channelCatalog;
         _epgStorage = epgStorage;
+        _sources = sources;
         _timeZone = ResolveTimeZone(config["CacheServer:BroadcastTimeZone"] ?? "Asia/Tokyo");
         _nhkArea = config["CacheServer:NhkProgramApi:Area"] ?? "130";
         _http = new HttpClient(new SocketsHttpHandler
@@ -215,12 +218,14 @@ public sealed class ProgramInfoService : BackgroundService
         var interval = TimeSpan.FromSeconds(Math.Max(60,
             _config.GetValue<int>("CacheServer:ProgramInfoUpdateIntervalSeconds", 1200)));
         static string? Stamp(DateTimeOffset value) => value == DateTimeOffset.MinValue ? null : value.ToString("O");
-        object Source(string key, string name, bool enabled, DateTimeOffset lastSuccess) => new
+        object Source(IEpgSource source, DateTimeOffset lastSuccess) => new
         {
-            key, name, enabled, lastSuccessAt = Stamp(lastSuccess),
-            state = !enabled ? "disabled" : lastSuccess == DateTimeOffset.MinValue ? "waiting" : "ok"
+            key = source.Key,
+            name = source.Name,
+            enabled = source.IsEnabled(_config),
+            lastSuccessAt = Stamp(lastSuccess),
+            state = !source.IsEnabled(_config) ? "disabled" : lastSuccess == DateTimeOffset.MinValue ? "waiting" : "ok"
         };
-        var nhkKey = _config["CacheServer:NhkProgramApi:API_Key"] ?? _config["CacheServer:NhkProgramApi:ApiKey"];
         return new
         {
             refreshing = _refreshLock.CurrentCount == 0,
@@ -231,13 +236,13 @@ public sealed class ProgramInfoService : BackgroundService
             cachedPrograms = programs,
             sources = new[]
             {
-                Source("tver", "TVer", true, _lastFetchUtc),
-                Source("nhk", "NHK番組API", !string.IsNullOrWhiteSpace(nhkKey), _lastNhkFetchUtc),
-                Source("atx", "AT-X", _config.GetValue<bool>("CacheServer:AtxProgram:Enabled", true), _lastAtxFetchUtc),
-                Source("ouj", "放送大学", _config.GetValue<bool>("CacheServer:OujProgram:Enabled", true), _lastOujFetchUtc),
-                Source("bs4", "BS日テレサブ", _config.GetValue<bool>("CacheServer:Bs4SubChannelProgram:Enabled", true), _lastBs4SubChannelFetchUtc),
-                Source("bstbs", "BS-TBSサブ", _config.GetValue<bool>("CacheServer:BsTbsSubChannelProgram:Enabled", true), _lastBsTbsSubChannelFetchUtc),
-                Source("bsfuji", "BSフジサブ", _config.GetValue<bool>("CacheServer:BsFujiSubChannelProgram:Enabled", true), _lastBsFujiSubChannelFetchUtc),
+                Source(_sources["tver"], _lastFetchUtc),
+                Source(_sources["nhk"], _lastNhkFetchUtc),
+                Source(_sources["atx"], _lastAtxFetchUtc),
+                Source(_sources["ouj"], _lastOujFetchUtc),
+                Source(_sources["bs4"], _lastBs4SubChannelFetchUtc),
+                Source(_sources["bstbs"], _lastBsTbsSubChannelFetchUtc),
+                Source(_sources["bsfuji"], _lastBsFujiSubChannelFetchUtc),
             }
         };
     }

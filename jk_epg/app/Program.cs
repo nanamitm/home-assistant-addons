@@ -1,10 +1,12 @@
 using System.Globalization;
 using jkcnsl_cache;
+using jkcnsl_cache.Sources;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.AddSimpleConsole(options => options.TimestampFormat = "yyyy-MM-dd HH:mm:ss ");
 builder.Services.AddSingleton<ChannelCatalog>();
 builder.Services.AddSingleton<ChannelsStreamBroadcaster>();
+builder.Services.AddEpgSources();
 builder.Services.AddSingleton<EpgStorageService>();
 builder.Services.AddSingleton<ProgramInfoService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<EpgStorageService>());
