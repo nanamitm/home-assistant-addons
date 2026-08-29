@@ -99,7 +99,6 @@ function render(){
   const band=$('band').value
   const channels=schedule.channels
     .filter(c=>selectedChannels.has(c.video)&&(band==='all'||(band==='bs')===c.bs))
-    .map(c=>({...c,programs:selectedGenres.size===0?c.programs:c.programs.filter(p=>selectedGenres.has(p.genreCode||'__unknown__'))}))
     .filter(c=>c.programs.length>0)
   guide.style.setProperty('--count',Math.max(1,channels.length)); guide.innerHTML='<div class="corner">時刻</div>'+channels.map(c=>`<div class="channel">${escapeHtml(c.name)}</div>`).join('')
   const start=new Date(schedule.startAt).getTime(), end=new Date(schedule.endAt).getTime()
@@ -139,7 +138,8 @@ function render(){
       const first=Math.max(0,Math.floor((a-start)/60000)),last=Math.min(totalMinutes,Math.ceil((b-start)/60000))
       const height=Math.max(2,cumulativePixels[last]-cumulativePixels[first]-2),meta=genreMeta[genreKey(p.genreCode)]
       const sizeClass=height>=52?'with-badge':height<36?'tiny':'compact'
-      const box=document.createElement('article');box.className=`program ${meta.className} ${sizeClass}`;box.style.top=`${cumulativePixels[first]}px`;box.style.height=`${height}px`;box.title=`${p.genreName||meta.name}: ${p.title}`
+      const dimmed=selectedGenres.size>0&&!selectedGenres.has(p.genreCode||'__unknown__')
+      const box=document.createElement('article');box.className=`program ${meta.className} ${sizeClass}${dimmed?' dimmed':''}`;box.style.top=`${cumulativePixels[first]}px`;box.style.height=`${height}px`;box.title=`${p.genreName||meta.name}: ${p.title}`
       const badge=height>=52?`<span class="genre-badge">${escapeHtml(p.genreName||meta.name)}</span>`:''
       box.innerHTML=`<div class="program-meta"><time>${pad(new Date(p.startAt).getHours())}:${pad(new Date(p.startAt).getMinutes())}–${pad(new Date(p.endAt).getHours())}:${pad(new Date(p.endAt).getMinutes())}</time>${badge}</div><strong>${escapeHtml(p.title)}</strong>`;col.append(box)} guide.append(col)
   }

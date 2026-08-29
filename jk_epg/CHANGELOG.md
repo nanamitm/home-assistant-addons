@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.7
+
+- Dim programs outside the selected genres instead of hiding them.
+- Keep the schedule geometry stable while changing genre selections.
+
 ## 0.1.6
 
 - Persist multi-select genre filters in browser local storage.
