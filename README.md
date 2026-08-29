@@ -10,6 +10,8 @@ General-purpose Home Assistant add-ons maintained by nanamitm.
   entities, diagnostics, dashboard and automation examples.
 - **SDRconnect Server** — Runs the SDRplay SDRconnect server against an RSP
   receiver on the host, for tuning from SDRconnect clients or a browser.
+- **TVTest EPG Sync** — Relays EPG between TVTest instances on a LAN, so a
+  schedule received by one is available to the others within seconds.
 
 Add this repository to the Home Assistant add-on store:
 

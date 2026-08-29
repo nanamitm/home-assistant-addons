@@ -1,0 +1,29 @@
+name: TVTest EPG Sync
+version: "1.0.0"
+slug: tvtest_epg_sync
+description: Relays EPG between TVTest instances on a LAN, one service at a time
+url: https://github.com/nanamitm/home-assistant-addons/tree/main/tvtest_epg_sync
+arch:
+  - aarch64
+  - amd64
+init: false
+startup: services
+stage: experimental
+boot: auto
+ingress: true
+ingress_port: 8099
+watchdog: http://[HOST]:[PORT:8077]/api/health
+panel_icon: mdi:television-guide
+panel_title: EPG Sync
+ports:
+  8077/tcp: 8077
+ports_description:
+  8077/tcp: Port that TVTest connects to
+options:
+  token: ""
+  log_level: info
+  retention_days: 14
+schema:
+  token: password?
+  log_level: list(debug|info|warning|error)
+  retention_days: int(0,90)

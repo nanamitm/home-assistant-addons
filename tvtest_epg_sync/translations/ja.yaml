@@ -1,0 +1,10 @@
+configuration:
+  token:
+    name: トークン
+    description: TVTestがX-EPG-Tokenヘッダで送る合言葉です。空にすると、ポートに到達できるホストからの読み書きをすべて受け付けます。
+  log_level:
+    name: ログの詳しさ
+    description: アドオンが出力するログの量です。接続や転送を1件ずつ確認したい場合はdebugにします。
+  retention_days:
+    name: 保持日数
+    description: この日数を超えて更新のないサービスを削除します。0にするとすべて保持します。

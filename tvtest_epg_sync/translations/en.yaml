@@ -1,0 +1,10 @@
+configuration:
+  token:
+    name: Token
+    description: Token that TVTest must present in the X-EPG-Token header. Leave empty to accept any host that can reach the port.
+  log_level:
+    name: Log level
+    description: How much the add-on logs. Set this to debug to see every connection and transfer.
+  retention_days:
+    name: Retention days
+    description: Services that have not been updated for this many days are deleted. Set 0 to keep everything.
