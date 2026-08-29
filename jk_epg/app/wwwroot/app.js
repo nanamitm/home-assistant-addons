@@ -39,6 +39,16 @@ function showCurrentTime(){
   if(dateInput.value===today&&schedule?.date===today)render()
   else{dateInput.value=today;load()}
 }
+function showProgramDetails(program,channel){
+  const start=new Date(program.startAt),end=new Date(program.endAt),minutes=Math.max(0,Math.round((end-start)/60000))
+  $('dialog-channel').textContent=`${channel.name} (${channel.video})`
+  $('dialog-title').textContent=program.title
+  $('dialog-time').textContent=`${start.toLocaleDateString('ja-JP')} ${pad(start.getHours())}:${pad(start.getMinutes())}–${pad(end.getHours())}:${pad(end.getMinutes())}`
+  $('dialog-duration').textContent=`${minutes}分`
+  $('dialog-genre').textContent=program.genreName||genreMeta[genreKey(program.genreCode)].name
+  $('dialog-source').textContent=program.source||'不明'
+  $('program-dialog').showModal()
+}
 
 async function load(){
   loading.hidden=false; guide.hidden=true; status.textContent='取得中…'
@@ -149,6 +159,8 @@ function render(){
       const sizeClass=height>=52?'with-badge':height<36?'tiny':'compact'
       const dimmed=!matchesProgram(p)
       const box=document.createElement('article');box.className=`program ${meta.className} ${sizeClass}${dimmed?' dimmed':''}`;box.style.top=`${cumulativePixels[first]}px`;box.style.height=`${height}px`;box.title=`${p.genreName||meta.name}: ${p.title}`
+      box.tabIndex=0;box.setAttribute('role','button');box.setAttribute('aria-label',`${channel.name} ${p.title}の詳細`)
+      box.addEventListener('click',()=>showProgramDetails(p,channel));box.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();showProgramDetails(p,channel)}})
       const badge=height>=52?`<span class="genre-badge">${escapeHtml(p.genreName||meta.name)}</span>`:''
       box.innerHTML=`<div class="program-meta"><time>${pad(new Date(p.startAt).getHours())}:${pad(new Date(p.startAt).getMinutes())}–${pad(new Date(p.endAt).getHours())}:${pad(new Date(p.endAt).getMinutes())}</time>${badge}</div><strong>${escapeHtml(p.title)}</strong>`;col.append(box)} guide.append(col)
   }
@@ -157,4 +169,4 @@ function render(){
   else scrollToNowRequested=false
 }
 function escapeHtml(s){const e=document.createElement('span');e.textContent=s;return e.innerHTML}
-dateInput.value=broadcastToday();$('prev').onclick=()=>shift(-1);$('next').onclick=()=>shift(1);$('today').onclick=showCurrentTime;$('now').onclick=showCurrentTime;$('reload').onclick=load;dateInput.onchange=load;$('band').onchange=render;$('program-search').oninput=event=>{searchQuery=event.target.value.trim().toLocaleLowerCase('ja');render()};$('genre-filter-clear').onclick=()=>{selectedGenres.clear();saveGenreSelection();buildGenres();render()};document.querySelectorAll('[data-channel-selection]').forEach(button=>button.onclick=()=>selectChannelGroup(button.dataset.channelSelection));load()
+dateInput.value=broadcastToday();$('prev').onclick=()=>shift(-1);$('next').onclick=()=>shift(1);$('today').onclick=showCurrentTime;$('now').onclick=showCurrentTime;$('reload').onclick=load;dateInput.onchange=load;$('band').onchange=render;$('program-search').oninput=event=>{searchQuery=event.target.value.trim().toLocaleLowerCase('ja');render()};$('genre-filter-clear').onclick=()=>{selectedGenres.clear();saveGenreSelection();buildGenres();render()};$('dialog-close').onclick=()=>$('program-dialog').close();$('program-dialog').onclick=event=>{if(event.target===$('program-dialog'))$('program-dialog').close()};document.querySelectorAll('[data-channel-selection]').forEach(button=>button.onclick=()=>selectChannelGroup(button.dataset.channelSelection));load()

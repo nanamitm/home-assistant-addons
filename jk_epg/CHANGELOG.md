@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.10
+
+- Add an accessible program-details dialog for mouse and keyboard users.
+- Show channel, broadcast time, duration, genre and EPG source.
+
 ## 0.1.9
 
 - Add case-insensitive program-title search with a live match count.

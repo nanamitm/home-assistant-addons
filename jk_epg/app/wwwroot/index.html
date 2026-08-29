@@ -50,6 +50,19 @@
     <div id="loading">番組表を読み込んでいます…</div>
     <div id="guide" hidden></div>
   </main>
+  <dialog id="program-dialog">
+    <div class="dialog-head">
+      <span id="dialog-channel"></span>
+      <button id="dialog-close" type="button" aria-label="閉じる">×</button>
+    </div>
+    <h2 id="dialog-title"></h2>
+    <dl>
+      <div><dt>放送日時</dt><dd id="dialog-time"></dd></div>
+      <div><dt>放送時間</dt><dd id="dialog-duration"></dd></div>
+      <div><dt>ジャンル</dt><dd id="dialog-genre"></dd></div>
+      <div><dt>取得元</dt><dd id="dialog-source"></dd></div>
+    </dl>
+  </dialog>
   <footer>番組情報は各提供元から取得しています。NHK番組の情報提供: NHK</footer>
   <script type="module" src="./app.js"></script>
 </body>
