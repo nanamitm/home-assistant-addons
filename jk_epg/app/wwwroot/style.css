@@ -5,6 +5,8 @@ body { display:grid; grid-template-rows:auto 1fr auto }
 header { display:flex; gap:8px; align-items:center; padding:10px; background:var(--panel); border-bottom:1px solid var(--line); flex-wrap:wrap }
 button, input, select { min-height:36px; border:1px solid #4b5563; border-radius:6px; background:#111827; color:inherit; padding:6px 10px }
 button { cursor:pointer } #status { color:var(--muted); margin-left:auto }
+#program-search { width:180px }
+#search-count { color:var(--muted); font-size:11px; white-space:nowrap }
 #legend,#genre-filter,#channel-filter { position:relative }
 #legend summary,#genre-filter summary,#channel-filter summary { min-height:36px; display:flex; align-items:center; border:1px solid #4b5563; border-radius:6px; background:#111827; padding:6px 10px; cursor:pointer; list-style:none }
 #legend summary::-webkit-details-marker,#genre-filter summary::-webkit-details-marker,#channel-filter summary::-webkit-details-marker { display:none }

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.9
+
+- Add case-insensitive program-title search with a live match count.
+- Dim non-matching programs while keeping the schedule layout stable.
+
 ## 0.1.8
 
 - Add a Current button that returns to today and scrolls to the current-time line.

@@ -2,6 +2,7 @@ const $ = id => document.getElementById(id)
 const dateInput=$('date'), guide=$('guide'), loading=$('loading'), status=$('status')
 let schedule=null
 let scrollToNowRequested=true
+let searchQuery=''
 const genreStorageKey='jk-epg-selected-genres'
 let savedGenres=[]
 try{const value=localStorage.getItem(genreStorageKey);if(value!==null){const parsed=JSON.parse(value);if(Array.isArray(parsed))savedGenres=parsed}}catch{}
@@ -106,6 +107,8 @@ function render(){
   const channels=schedule.channels
     .filter(c=>selectedChannels.has(c.video)&&(band==='all'||(band==='bs')===c.bs))
     .filter(c=>c.programs.length>0)
+  const matchesProgram=p=>(selectedGenres.size===0||selectedGenres.has(p.genreCode||'__unknown__'))&&(!searchQuery||p.title.toLocaleLowerCase('ja').includes(searchQuery))
+  $('search-count').textContent=searchQuery?`一致 ${channels.reduce((count,c)=>count+c.programs.filter(matchesProgram).length,0)}件`:''
   guide.style.setProperty('--count',Math.max(1,channels.length)); guide.innerHTML='<div class="corner">時刻</div>'+channels.map(c=>`<div class="channel">${escapeHtml(c.name)}</div>`).join('')
   const start=new Date(schedule.startAt).getTime(), end=new Date(schedule.endAt).getTime()
   const totalMinutes=Math.max(1,Math.round((end-start)/60000))
@@ -144,7 +147,7 @@ function render(){
       const first=Math.max(0,Math.floor((a-start)/60000)),last=Math.min(totalMinutes,Math.ceil((b-start)/60000))
       const height=Math.max(2,cumulativePixels[last]-cumulativePixels[first]-2),meta=genreMeta[genreKey(p.genreCode)]
       const sizeClass=height>=52?'with-badge':height<36?'tiny':'compact'
-      const dimmed=selectedGenres.size>0&&!selectedGenres.has(p.genreCode||'__unknown__')
+      const dimmed=!matchesProgram(p)
       const box=document.createElement('article');box.className=`program ${meta.className} ${sizeClass}${dimmed?' dimmed':''}`;box.style.top=`${cumulativePixels[first]}px`;box.style.height=`${height}px`;box.title=`${p.genreName||meta.name}: ${p.title}`
       const badge=height>=52?`<span class="genre-badge">${escapeHtml(p.genreName||meta.name)}</span>`:''
       box.innerHTML=`<div class="program-meta"><time>${pad(new Date(p.startAt).getHours())}:${pad(new Date(p.startAt).getMinutes())}–${pad(new Date(p.endAt).getHours())}:${pad(new Date(p.endAt).getMinutes())}</time>${badge}</div><strong>${escapeHtml(p.title)}</strong>`;col.append(box)} guide.append(col)
@@ -154,4 +157,4 @@ function render(){
   else scrollToNowRequested=false
 }
 function escapeHtml(s){const e=document.createElement('span');e.textContent=s;return e.innerHTML}
-dateInput.value=broadcastToday();$('prev').onclick=()=>shift(-1);$('next').onclick=()=>shift(1);$('today').onclick=showCurrentTime;$('now').onclick=showCurrentTime;$('reload').onclick=load;dateInput.onchange=load;$('band').onchange=render;$('genre-filter-clear').onclick=()=>{selectedGenres.clear();saveGenreSelection();buildGenres();render()};document.querySelectorAll('[data-channel-selection]').forEach(button=>button.onclick=()=>selectChannelGroup(button.dataset.channelSelection));load()
+dateInput.value=broadcastToday();$('prev').onclick=()=>shift(-1);$('next').onclick=()=>shift(1);$('today').onclick=showCurrentTime;$('now').onclick=showCurrentTime;$('reload').onclick=load;dateInput.onchange=load;$('band').onchange=render;$('program-search').oninput=event=>{searchQuery=event.target.value.trim().toLocaleLowerCase('ja');render()};$('genre-filter-clear').onclick=()=>{selectedGenres.clear();saveGenreSelection();buildGenres();render()};document.querySelectorAll('[data-channel-selection]').forEach(button=>button.onclick=()=>selectChannelGroup(button.dataset.channelSelection));load()
