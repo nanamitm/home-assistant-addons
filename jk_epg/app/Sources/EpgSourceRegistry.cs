@@ -5,7 +5,7 @@ public sealed class EpgSourceRegistry(IEnumerable<IEpgSource> sources)
     private readonly IReadOnlyDictionary<string, IEpgSource> _sources =
         sources.ToDictionary(source => source.Key, StringComparer.Ordinal);
 
-    public IReadOnlyCollection<IEpgSource> All => _sources.Values;
+    public IReadOnlyCollection<IEpgSource> All => _sources.Values.ToArray();
 
     public IEpgSource this[string key] => _sources[key];
 }
