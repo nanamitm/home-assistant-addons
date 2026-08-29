@@ -250,6 +250,12 @@ public sealed class ProgramInfoService : BackgroundService
             nextScheduledAt = _lastFetchUtc == DateTimeOffset.MinValue ? null : Stamp(_lastFetchUtc.Add(interval)),
             cachedChannels = channels,
             cachedPrograms = programs,
+            cacheRecovery = _epgStorage.LastRecovery == null ? null : new
+            {
+                recoveredAt = _epgStorage.LastRecovery.RecoveredAt.ToString("O"),
+                backupPath = _epgStorage.LastRecovery.BackupPath,
+                sqliteErrorCode = _epgStorage.LastRecovery.SqliteErrorCode,
+            },
             sources = new[]
             {
                 Source(_sources["tver"], _lastFetchUtc),

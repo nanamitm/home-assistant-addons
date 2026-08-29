@@ -71,7 +71,7 @@ const statusTime=value=>value?new Date(value).toLocaleString('ja-JP'):'—'
 async function fetchEpgStatus(){
   try{
     const response=await fetch(api('api/programs/status'),{cache:'no-store'});if(!response.ok)throw new Error(`${response.status}`)
-    const data=await response.json();$('epg-status-summary').textContent=`最終成功: ${statusTime(data.lastSuccessAt)} / 次回予定: ${statusTime(data.nextScheduledAt)} / ${data.cachedChannels}局 ${data.cachedPrograms}番組`
+    const data=await response.json();const recovery=data.cacheRecovery?` / キャッシュ復旧: ${statusTime(data.cacheRecovery.recoveredAt)}`:'';$('epg-status-summary').textContent=`最終成功: ${statusTime(data.lastSuccessAt)} / 次回予定: ${statusTime(data.nextScheduledAt)} / ${data.cachedChannels}局 ${data.cachedPrograms}番組${recovery}`
     const sources=$('epg-source-status');sources.innerHTML=''
     for(const source of data.sources){const row=document.createElement('div');row.className=`source-state ${source.state}`;const stateLabel=source.state==='disabled'?'無効':source.state==='ok'?'正常':source.state==='error'?'異常':'待機中';const details=source.lastAttemptAt?`${source.itemCount}件 / ${source.durationMs??'—'}ms${source.consecutiveFailures?` / 連続失敗${source.consecutiveFailures}回`:''}`:statusTime(source.lastSuccessAt);row.title=source.error||'';row.innerHTML=`<span>${escapeHtml(source.name)}</span><strong>${stateLabel}</strong><time>${escapeHtml(details)}</time>`;sources.append(row)}
     $('epg-refresh').disabled=data.refreshing

@@ -8,6 +8,9 @@ public sealed class EpgStorageService : BackgroundService
     private readonly ILogger<EpgStorageService> _logger;
     private readonly string _dbPath;
     private readonly int _retentionDays;
+    private readonly object _recoveryLock = new();
+
+    public CacheRecoveryInfo? LastRecovery { get; private set; }
 
     public EpgStorageService(IConfiguration config, ILogger<EpgStorageService> logger)
     {
@@ -178,11 +181,7 @@ public sealed class EpgStorageService : BackgroundService
         if (!string.IsNullOrEmpty(dir))
             Directory.CreateDirectory(dir);
 
-        using (var conn = OpenConnection())
-        {
-            InitSchema(conn);
-            CleanupOld(conn);
-        }
+        InitializeWithRecovery();
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -198,6 +197,52 @@ public sealed class EpgStorageService : BackgroundService
                 _logger.LogWarning(ex, "[EpgStorage] EPGクリーンアップに失敗しました");
             }
         }
+    }
+
+    private void InitializeWithRecovery()
+    {
+        lock (_recoveryLock)
+        {
+            try
+            {
+                InitializeAndCheck();
+            }
+            catch (SqliteException error)
+            {
+                var backupPath = QuarantineCorruptDatabase();
+                LastRecovery = new CacheRecoveryInfo(DateTimeOffset.UtcNow, backupPath, error.SqliteErrorCode,
+                    error.Message);
+                _logger.LogError(error,
+                    "[EpgStorage] キャッシュ破損を検出したため退避して再作成します: backup={Backup}", backupPath);
+                InitializeAndCheck();
+            }
+        }
+    }
+
+    private void InitializeAndCheck()
+    {
+        using var conn = OpenConnection();
+        InitSchema(conn);
+        using var check = conn.CreateCommand();
+        check.CommandText = "PRAGMA quick_check";
+        var result = Convert.ToString(check.ExecuteScalar());
+        if (!string.Equals(result, "ok", StringComparison.OrdinalIgnoreCase))
+            throw new SqliteException($"SQLite quick_check failed: {result}", 11);
+        CleanupOld(conn);
+    }
+
+    private string? QuarantineCorruptDatabase()
+    {
+        if (!File.Exists(_dbPath)) return null;
+        var backupPath = $"{_dbPath}.corrupt-{DateTimeOffset.UtcNow:yyyyMMddTHHmmssZ}";
+        File.Move(_dbPath, backupPath);
+        foreach (var suffix in new[] { "-wal", "-shm" })
+        {
+            var sidecar = _dbPath + suffix;
+            if (File.Exists(sidecar))
+                File.Move(sidecar, backupPath + suffix);
+        }
+        return backupPath;
     }
 
     private void CleanupOld(SqliteConnection conn)
@@ -304,3 +349,9 @@ public sealed class EpgStorageService : BackgroundService
         return result;
     }
 }
+
+public sealed record CacheRecoveryInfo(
+    DateTimeOffset RecoveredAt,
+    string? BackupPath,
+    int SqliteErrorCode,
+    string Error);
