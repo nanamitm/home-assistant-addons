@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.3
+
+- Fix the genre filter so non-matching programs are excluded from the schedule.
+- Recalculate variable row heights using only the displayed genre.
+
 ## 0.1.2
 
 - Add subtle genre-colored card backgrounds and stronger matching accent lines.

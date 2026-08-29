@@ -44,7 +44,10 @@ function buildGenres(){
 }
 function render(){
   const band=$('band').value, genre=$('genre').value
-  const channels=schedule.channels.filter(c=>(band==='all'||(band==='bs')===c.bs)&&c.programs.some(p=>genre==='all'||p.genreCode===genre))
+  const channels=schedule.channels
+    .filter(c=>band==='all'||(band==='bs')===c.bs)
+    .map(c=>({...c,programs:genre==='all'?c.programs:c.programs.filter(p=>p.genreCode===genre)}))
+    .filter(c=>c.programs.length>0)
   guide.style.setProperty('--count',Math.max(1,channels.length)); guide.innerHTML='<div class="corner">時刻</div>'+channels.map(c=>`<div class="channel">${escapeHtml(c.name)}</div>`).join('')
   const start=new Date(schedule.startAt).getTime(), end=new Date(schedule.endAt).getTime()
   const totalMinutes=Math.max(1,Math.round((end-start)/60000))
