@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.12
+
+- Add a responsive current/next program view alongside the full schedule.
+- Reuse channel, favorite, genre and search preferences in the compact view.
+
 ## 0.1.11
 
 - Add persistent favorite channels and an optional favorites-only view.

@@ -3,6 +3,7 @@ const dateInput=$('date'), guide=$('guide'), loading=$('loading'), status=$('sta
 let schedule=null
 let scrollToNowRequested=true
 let searchQuery=''
+let viewMode='guide'
 const genreStorageKey='jk-epg-selected-genres'
 let savedGenres=[]
 try{const value=localStorage.getItem(genreStorageKey);if(value!==null){const parsed=JSON.parse(value);if(Array.isArray(parsed))savedGenres=parsed}}catch{}
@@ -58,14 +59,14 @@ function showProgramDetails(program,channel){
 }
 
 async function load(){
-  loading.hidden=false; guide.hidden=true; status.textContent='取得中…'
+  loading.hidden=false;guide.hidden=true;$('now-next').hidden=true;status.textContent='取得中…'
   try{
     const response=await fetch(api(`api/programs/schedule?date=${encodeURIComponent(dateInput.value)}`),{cache:'no-store'})
     if(!response.ok)throw new Error(`${response.status} ${response.statusText}`)
     schedule=await response.json(); buildChannels(); buildGenres(); render()
     status.textContent=schedule.loaded?`更新 ${schedule.updatedAt?new Date(schedule.updatedAt).toLocaleTimeString('ja-JP'):'キャッシュ'}`:'データなし'
   }catch(error){loading.textContent=`取得失敗: ${error.message}`;status.textContent='エラー';return}
-  loading.hidden=true;guide.hidden=false
+  loading.hidden=true
 }
 function saveChannelSelection(){
   try{localStorage.setItem(channelStorageKey,JSON.stringify([...selectedChannels]))}catch{}
@@ -150,6 +151,8 @@ function render(){
     .filter(c=>c.programs.length>0)
   const matchesProgram=p=>(selectedGenres.size===0||selectedGenres.has(p.genreCode||'__unknown__'))&&(!searchQuery||p.title.toLocaleLowerCase('ja').includes(searchQuery))
   $('search-count').textContent=searchQuery?`一致 ${channels.reduce((count,c)=>count+c.programs.filter(matchesProgram).length,0)}件`:''
+  if(viewMode==='now-next'){renderNowNext(channels,matchesProgram);return}
+  guide.hidden=false;$('now-next').hidden=true
   guide.style.setProperty('--count',Math.max(1,channels.length)); guide.innerHTML='<div class="corner">時刻</div>'+channels.map(c=>`<div class="channel">${escapeHtml(c.name)}</div>`).join('')
   const start=new Date(schedule.startAt).getTime(), end=new Date(schedule.endAt).getTime()
   const totalMinutes=Math.max(1,Math.round((end-start)/60000))
@@ -199,5 +202,27 @@ function render(){
   const now=Date.now();if(now>=start&&now<end){const minute=Math.min(totalMinutes,Math.max(0,Math.floor((now-start)/60000))),top=48+cumulativePixels[minute];const line=document.createElement('div');line.className='now';line.style.top=`${top}px`;guide.append(line);if(scrollToNowRequested){requestAnimationFrame(()=>{$('viewport').scrollTop=Math.max(0,top-$('viewport').clientHeight*.3)});scrollToNowRequested=false}}
   else scrollToNowRequested=false
 }
+function renderNowNext(channels,matchesProgram){
+  guide.hidden=true;const container=$('now-next');container.hidden=false;container.innerHTML=''
+  const now=Date.now()
+  for(const channel of channels){
+    const programs=[...channel.programs].sort((a,b)=>new Date(a.startAt)-new Date(b.startAt))
+    const current=programs.find(program=>new Date(program.startAt).getTime()<=now&&now<new Date(program.endAt).getTime())
+    const next=programs.find(program=>new Date(program.startAt).getTime()>now)
+    const row=document.createElement('section');row.className='now-next-row'
+    const heading=document.createElement('h3');heading.textContent=channel.name;row.append(heading)
+    for(const [label,program] of [['現在',current],['次',next]]){
+      const card=document.createElement('button');card.type='button';card.className='now-next-program'
+      if(program){const start=new Date(program.startAt);card.classList.toggle('dimmed',!matchesProgram(program));card.innerHTML=`<span>${label} ${pad(start.getHours())}:${pad(start.getMinutes())}</span><strong>${escapeHtml(program.title)}</strong>`;card.onclick=()=>showProgramDetails(program,channel)}
+      else{card.disabled=true;card.innerHTML=`<span>${label}</span><strong>番組情報なし</strong>`}
+      row.append(card)
+    }
+    container.append(row)
+  }
+  if(!channels.length)container.innerHTML='<div class="message">表示するチャンネルがありません</div>'
+}
+function setViewMode(mode){
+  viewMode=mode;$('view-guide').classList.toggle('active',mode==='guide');$('view-now-next').classList.toggle('active',mode==='now-next');render()
+}
 function escapeHtml(s){const e=document.createElement('span');e.textContent=s;return e.innerHTML}
-dateInput.value=broadcastToday();$('prev').onclick=()=>shift(-1);$('next').onclick=()=>shift(1);$('today').onclick=showCurrentTime;$('now').onclick=showCurrentTime;$('reload').onclick=load;dateInput.onchange=load;$('band').onchange=render;$('program-search').oninput=event=>{searchQuery=event.target.value.trim().toLocaleLowerCase('ja');render()};$('favorite-only').onchange=event=>{favoriteOnly=event.target.checked;saveChannelPreferences();render()};$('genre-filter-clear').onclick=()=>{selectedGenres.clear();saveGenreSelection();buildGenres();render()};$('dialog-close').onclick=()=>$('program-dialog').close();$('program-dialog').onclick=event=>{if(event.target===$('program-dialog'))$('program-dialog').close()};document.querySelectorAll('[data-channel-selection]').forEach(button=>button.onclick=()=>selectChannelGroup(button.dataset.channelSelection));load()
+dateInput.value=broadcastToday();$('prev').onclick=()=>shift(-1);$('next').onclick=()=>shift(1);$('today').onclick=showCurrentTime;$('now').onclick=showCurrentTime;$('reload').onclick=load;$('view-guide').onclick=()=>setViewMode('guide');$('view-now-next').onclick=()=>setViewMode('now-next');dateInput.onchange=load;$('band').onchange=render;$('program-search').oninput=event=>{searchQuery=event.target.value.trim().toLocaleLowerCase('ja');render()};$('favorite-only').onchange=event=>{favoriteOnly=event.target.checked;saveChannelPreferences();render()};$('genre-filter-clear').onclick=()=>{selectedGenres.clear();saveGenreSelection();buildGenres();render()};$('dialog-close').onclick=()=>$('program-dialog').close();$('program-dialog').onclick=event=>{if(event.target===$('program-dialog'))$('program-dialog').close()};document.querySelectorAll('[data-channel-selection]').forEach(button=>button.onclick=()=>selectChannelGroup(button.dataset.channelSelection));load()
