@@ -15,11 +15,15 @@ button { cursor:pointer } #status { color:var(--muted); margin-left:auto }
 #channel-filter-panel { position:absolute; top:42px; left:0; z-index:22; width:420px; padding:10px; border:1px solid #4b5563; border-radius:8px; background:#111827; box-shadow:0 10px 30px #0009 }
 .channel-filter-actions { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; margin-bottom:8px }
 .channel-filter-actions button { min-height:30px; padding:4px; font-size:11px }
-#channel-filter-options { max-height:min(60vh,520px); overflow:auto; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:3px 10px; padding-right:4px }
+.favorite-only { display:flex; align-items:center; gap:6px; margin:0 0 8px; color:var(--muted); font-size:11px }
+.favorite-only input { margin:0; accent-color:#facc15 }
+#channel-filter-options { max-height:min(60vh,520px); overflow:auto; display:grid; grid-template-columns:1fr; gap:3px; padding-right:4px }
 .channel-filter-option { display:flex; align-items:center; gap:6px; min-width:0; min-height:27px; font-size:11px; cursor:pointer }
 .channel-filter-option input { margin:0; accent-color:#22d3ee }
-.channel-filter-option span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.channel-filter-option > label { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:pointer }
 .channel-filter-option small { margin-left:auto; color:var(--muted); font-size:9px }
+.channel-favorite,.channel-order { min-width:22px; min-height:22px; padding:0; border:0; background:transparent }
+.channel-favorite { color:#facc15; font-size:17px }.channel-order { color:var(--muted); font-size:13px }
 #genre-filter-panel { position:absolute; top:42px; left:0; z-index:21; width:360px; padding:10px; border:1px solid #4b5563; border-radius:8px; background:#111827; box-shadow:0 10px 30px #0009 }
 #genre-filter-clear { width:100%; min-height:30px; margin-bottom:8px; font-size:11px }
 #genre-filter-clear:disabled { opacity:.45; cursor:default }

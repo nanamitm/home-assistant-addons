@@ -12,6 +12,13 @@ let savedChannels=null
 try{const value=localStorage.getItem(channelStorageKey);if(value!==null){const parsed=JSON.parse(value);if(Array.isArray(parsed))savedChannels=parsed}}catch{}
 const selectedChannels=new Set(savedChannels||[])
 let channelSelectionInitialized=savedChannels!==null
+const favoriteStorageKey='jk-epg-favorite-channels',orderStorageKey='jk-epg-channel-order',favoriteOnlyStorageKey='jk-epg-favorite-only'
+let savedFavorites=[],channelOrder=[]
+try{const parsed=JSON.parse(localStorage.getItem(favoriteStorageKey)||'[]');if(Array.isArray(parsed))savedFavorites=parsed}catch{}
+try{const parsed=JSON.parse(localStorage.getItem(orderStorageKey)||'[]');if(Array.isArray(parsed))channelOrder=parsed}catch{}
+const favoriteChannels=new Set(savedFavorites)
+let favoriteOnly=false
+try{favoriteOnly=localStorage.getItem(favoriteOnlyStorageKey)==='true'}catch{}
 const genreMeta={
   '0':{name:'ニュース／報道',className:'genre-0'},
   '1':{name:'スポーツ',className:'genre-1'},
@@ -63,18 +70,34 @@ async function load(){
 function saveChannelSelection(){
   try{localStorage.setItem(channelStorageKey,JSON.stringify([...selectedChannels]))}catch{}
 }
+function saveChannelPreferences(){
+  try{localStorage.setItem(favoriteStorageKey,JSON.stringify([...favoriteChannels]));localStorage.setItem(orderStorageKey,JSON.stringify(channelOrder));localStorage.setItem(favoriteOnlyStorageKey,String(favoriteOnly))}catch{}
+}
+function orderedChannels(){
+  const positions=new Map(channelOrder.map((video,index)=>[video,index]))
+  return [...schedule.channels].sort((a,b)=>Number(favoriteChannels.has(b.video))-Number(favoriteChannels.has(a.video))||(positions.get(a.video)??9999)-(positions.get(b.video)??9999))
+}
 function buildChannels(){
   const available=new Set(schedule.channels.map(channel=>channel.video))
   if(!channelSelectionInitialized){for(const video of available)selectedChannels.add(video);channelSelectionInitialized=true;saveChannelSelection()}
   else{let changed=false;for(const video of [...selectedChannels])if(!available.has(video)){selectedChannels.delete(video);changed=true}if(changed)saveChannelSelection()}
+  let preferencesChanged=false
+  for(const video of [...favoriteChannels])if(!available.has(video)){favoriteChannels.delete(video);preferencesChanged=true}
+  const normalizedOrder=[...channelOrder.filter(video=>available.has(video)),...schedule.channels.map(channel=>channel.video).filter(video=>!channelOrder.includes(video))]
+  if(JSON.stringify(normalizedOrder)!==JSON.stringify(channelOrder)){channelOrder=normalizedOrder;preferencesChanged=true}
+  if(preferencesChanged)saveChannelPreferences()
+  $('favorite-only').checked=favoriteOnly
   const options=$('channel-filter-options');options.innerHTML=''
-  for(const channel of schedule.channels){
-    const label=document.createElement('label');label.className='channel-filter-option'
-    const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.value=channel.video;checkbox.checked=selectedChannels.has(channel.video)
+  for(const channel of orderedChannels()){
+    const label=document.createElement('div');label.className='channel-filter-option'
+    const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.id=`channel-${channel.video}`;checkbox.value=channel.video;checkbox.checked=selectedChannels.has(channel.video)
     checkbox.addEventListener('change',()=>{checkbox.checked?selectedChannels.add(channel.video):selectedChannels.delete(channel.video);saveChannelSelection();updateChannelFilterSummary();render()})
-    const name=document.createElement('span');name.textContent=channel.name
+    const favorite=document.createElement('button');favorite.type='button';favorite.className='channel-favorite';favorite.textContent=favoriteChannels.has(channel.video)?'★':'☆';favorite.title=favoriteChannels.has(channel.video)?'お気に入り解除':'お気に入りに追加';favorite.setAttribute('aria-label',`${channel.name}を${favorite.title}`);favorite.onclick=()=>{favoriteChannels.has(channel.video)?favoriteChannels.delete(channel.video):favoriteChannels.add(channel.video);saveChannelPreferences();buildChannels();render()}
+    const name=document.createElement('label');name.htmlFor=checkbox.id;name.textContent=channel.name
     const video=document.createElement('small');video.textContent=channel.video
-    label.append(checkbox,name,video);options.append(label)
+    const up=document.createElement('button');up.type='button';up.className='channel-order';up.textContent='↑';up.title='前へ移動';up.setAttribute('aria-label',`${channel.name}を前へ移動`);up.onclick=()=>moveChannel(channel.video,-1)
+    const down=document.createElement('button');down.type='button';down.className='channel-order';down.textContent='↓';down.title='後ろへ移動';down.setAttribute('aria-label',`${channel.name}を後ろへ移動`);down.onclick=()=>moveChannel(channel.video,1)
+    label.append(checkbox,favorite,name,video,up,down);options.append(label)
   }
   updateChannelFilterSummary()
 }
@@ -88,6 +111,14 @@ function selectChannelGroup(group){
     if(group==='all'||(group==='terrestrial'&&!channel.bs)||(group==='bs'&&channel.bs))selectedChannels.add(channel.video)
   }
   $('band').value='all';saveChannelSelection();buildChannels();render()
+}
+function moveChannel(video,delta){
+  const favorite=favoriteChannels.has(video),group=channelOrder.filter(item=>favoriteChannels.has(item)===favorite)
+  const index=group.indexOf(video),target=index+delta
+  if(index<0||target<0||target>=group.length)return
+  const currentIndex=channelOrder.indexOf(video),targetIndex=channelOrder.indexOf(group[target])
+  ;[channelOrder[currentIndex],channelOrder[targetIndex]]=[channelOrder[targetIndex],channelOrder[currentIndex]]
+  saveChannelPreferences();buildChannels();render()
 }
 function buildGenres(){
   const genres=new Map()
@@ -114,8 +145,8 @@ function updateGenreFilterSummary(genres){
 }
 function render(){
   const band=$('band').value
-  const channels=schedule.channels
-    .filter(c=>selectedChannels.has(c.video)&&(band==='all'||(band==='bs')===c.bs))
+  const channels=orderedChannels()
+    .filter(c=>selectedChannels.has(c.video)&&(!favoriteOnly||favoriteChannels.has(c.video))&&(band==='all'||(band==='bs')===c.bs))
     .filter(c=>c.programs.length>0)
   const matchesProgram=p=>(selectedGenres.size===0||selectedGenres.has(p.genreCode||'__unknown__'))&&(!searchQuery||p.title.toLocaleLowerCase('ja').includes(searchQuery))
   $('search-count').textContent=searchQuery?`一致 ${channels.reduce((count,c)=>count+c.programs.filter(matchesProgram).length,0)}件`:''
@@ -169,4 +200,4 @@ function render(){
   else scrollToNowRequested=false
 }
 function escapeHtml(s){const e=document.createElement('span');e.textContent=s;return e.innerHTML}
-dateInput.value=broadcastToday();$('prev').onclick=()=>shift(-1);$('next').onclick=()=>shift(1);$('today').onclick=showCurrentTime;$('now').onclick=showCurrentTime;$('reload').onclick=load;dateInput.onchange=load;$('band').onchange=render;$('program-search').oninput=event=>{searchQuery=event.target.value.trim().toLocaleLowerCase('ja');render()};$('genre-filter-clear').onclick=()=>{selectedGenres.clear();saveGenreSelection();buildGenres();render()};$('dialog-close').onclick=()=>$('program-dialog').close();$('program-dialog').onclick=event=>{if(event.target===$('program-dialog'))$('program-dialog').close()};document.querySelectorAll('[data-channel-selection]').forEach(button=>button.onclick=()=>selectChannelGroup(button.dataset.channelSelection));load()
+dateInput.value=broadcastToday();$('prev').onclick=()=>shift(-1);$('next').onclick=()=>shift(1);$('today').onclick=showCurrentTime;$('now').onclick=showCurrentTime;$('reload').onclick=load;dateInput.onchange=load;$('band').onchange=render;$('program-search').oninput=event=>{searchQuery=event.target.value.trim().toLocaleLowerCase('ja');render()};$('favorite-only').onchange=event=>{favoriteOnly=event.target.checked;saveChannelPreferences();render()};$('genre-filter-clear').onclick=()=>{selectedGenres.clear();saveGenreSelection();buildGenres();render()};$('dialog-close').onclick=()=>$('program-dialog').close();$('program-dialog').onclick=event=>{if(event.target===$('program-dialog'))$('program-dialog').close()};document.querySelectorAll('[data-channel-selection]').forEach(button=>button.onclick=()=>selectChannelGroup(button.dataset.channelSelection));load()

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.11
+
+- Add persistent favorite channels and an optional favorites-only view.
+- Keep favorite channels at the left of the guide.
+- Add accessible up/down channel ordering controls and persist the custom order.
+
 ## 0.1.10
 
 - Add an accessible program-details dialog for mouse and keyboard users.
