@@ -1,6 +1,7 @@
 const $ = id => document.getElementById(id)
 const dateInput=$('date'), guide=$('guide'), loading=$('loading'), status=$('status')
 let schedule=null
+const selectedGenres=new Set()
 const genreMeta={
   '0':{name:'ニュース／報道',className:'genre-0'},
   '1':{name:'スポーツ',className:'genre-1'},
@@ -35,18 +36,30 @@ async function load(){
   loading.hidden=true;guide.hidden=false
 }
 function buildGenres(){
-  const value=$('genre').value, genres=new Map()
-  schedule.channels.forEach(c=>c.programs.forEach(p=>{if(p.genreCode&&p.genreName)genres.set(p.genreCode,p.genreName)}))
-  $('genre').innerHTML='<option value="all">全ジャンル</option>'+[...genres].sort().map(([k,v])=>`<option value="${k}">${escapeHtml(v)}</option>`).join('')
-  if(genres.has(value))$('genre').value=value
-  const keys=new Set([...genres.keys()].map(genreKey));if(schedule.channels.some(c=>c.programs.some(p=>!p.genreCode)))keys.add('unknown')
+  const genres=new Map()
+  schedule.channels.forEach(c=>c.programs.forEach(p=>{const value=p.genreCode||'__unknown__',meta=genreMeta[genreKey(p.genreCode)];genres.set(value,p.genreName||meta.name)}))
+  for(const value of [...selectedGenres])if(!genres.has(value))selectedGenres.delete(value)
+  const options=$('genre-filter-options');options.innerHTML=''
+  for(const [value,name] of [...genres].sort((a,b)=>genreKey(a[0]).localeCompare(genreKey(b[0])))){
+    const meta=genreMeta[genreKey(value)],label=document.createElement('label');label.className=`genre-filter-option ${meta.className}`
+    const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.value=value;checkbox.checked=selectedGenres.has(value)
+    checkbox.addEventListener('change',()=>{checkbox.checked?selectedGenres.add(value):selectedGenres.delete(value);updateGenreFilterSummary(genres);render()})
+    label.innerHTML='<i></i>';label.append(checkbox,document.createTextNode(name));options.append(label)
+  }
+  updateGenreFilterSummary(genres)
+  const keys=new Set([...genres.keys()].map(genreKey))
   $('legend-items').innerHTML=[...keys].sort().map(key=>`<span class="legend-item ${genreMeta[key].className}"><i></i>${escapeHtml(genreMeta[key].name)}</span>`).join('')
 }
+function updateGenreFilterSummary(genres){
+  const names=[...selectedGenres].map(value=>genres.get(value)).filter(Boolean)
+  $('genre-filter-summary').textContent=names.length===0?'全ジャンル':names.length===1?names[0]:`ジャンル ${names.length}件`
+  $('genre-filter-clear').disabled=names.length===0
+}
 function render(){
-  const band=$('band').value, genre=$('genre').value
+  const band=$('band').value
   const channels=schedule.channels
     .filter(c=>band==='all'||(band==='bs')===c.bs)
-    .map(c=>({...c,programs:genre==='all'?c.programs:c.programs.filter(p=>p.genreCode===genre)}))
+    .map(c=>({...c,programs:selectedGenres.size===0?c.programs:c.programs.filter(p=>selectedGenres.has(p.genreCode||'__unknown__'))}))
     .filter(c=>c.programs.length>0)
   guide.style.setProperty('--count',Math.max(1,channels.length)); guide.innerHTML='<div class="corner">時刻</div>'+channels.map(c=>`<div class="channel">${escapeHtml(c.name)}</div>`).join('')
   const start=new Date(schedule.startAt).getTime(), end=new Date(schedule.endAt).getTime()
@@ -94,4 +107,4 @@ function render(){
   const now=Date.now();if(now>=start&&now<end){const minute=Math.min(totalMinutes,Math.max(0,Math.floor((now-start)/60000)));const line=document.createElement('div');line.className='now';line.style.top=`${48+cumulativePixels[minute]}px`;guide.append(line)}
 }
 function escapeHtml(s){const e=document.createElement('span');e.textContent=s;return e.innerHTML}
-dateInput.value=broadcastToday();$('prev').onclick=()=>shift(-1);$('next').onclick=()=>shift(1);$('today').onclick=()=>{dateInput.value=broadcastToday();load()};$('reload').onclick=load;dateInput.onchange=load;$('band').onchange=render;$('genre').onchange=render;load()
+dateInput.value=broadcastToday();$('prev').onclick=()=>shift(-1);$('next').onclick=()=>shift(1);$('today').onclick=()=>{dateInput.value=broadcastToday();load()};$('reload').onclick=load;dateInput.onchange=load;$('band').onchange=render;$('genre-filter-clear').onclick=()=>{selectedGenres.clear();buildGenres();render()};load()

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.4
+
+- Replace the single-choice genre selector with a multi-select checkbox panel.
+- Apply selected genres as an OR filter and provide a one-click reset to all genres.
+
 ## 0.1.3
 
 - Fix the genre filter so non-matching programs are excluded from the schedule.

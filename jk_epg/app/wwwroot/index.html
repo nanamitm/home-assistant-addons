@@ -17,7 +17,13 @@
       <option value="terrestrial">地上波</option>
       <option value="bs">BS・CS</option>
     </select>
-    <select id="genre" aria-label="ジャンル"><option value="all">全ジャンル</option></select>
+    <details id="genre-filter">
+      <summary id="genre-filter-summary">全ジャンル</summary>
+      <div id="genre-filter-panel">
+        <button id="genre-filter-clear" type="button">全ジャンルに戻す</button>
+        <div id="genre-filter-options"></div>
+      </div>
+    </details>
     <details id="legend">
       <summary>ジャンル凡例</summary>
       <div id="legend-items"></div>
