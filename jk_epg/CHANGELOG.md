@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2
+
+- Add subtle genre-colored card backgrounds and stronger matching accent lines.
+- Show textual genre badges on cards with enough room.
+- Add a collapsible genre legend and compact layouts for short programs.
+
 ## 0.1.1
 
 - Use the same variable pixel-density schedule layout as the jkcnsl-cache web client.

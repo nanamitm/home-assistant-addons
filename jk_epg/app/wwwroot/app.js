@@ -1,9 +1,26 @@
 const $ = id => document.getElementById(id)
 const dateInput=$('date'), guide=$('guide'), loading=$('loading'), status=$('status')
 let schedule=null
+const genreMeta={
+  '0':{name:'ニュース／報道',className:'genre-0'},
+  '1':{name:'スポーツ',className:'genre-1'},
+  '2':{name:'情報／ワイドショー',className:'genre-2'},
+  '3':{name:'ドラマ',className:'genre-3'},
+  '4':{name:'音楽',className:'genre-4'},
+  '5':{name:'バラエティ',className:'genre-5'},
+  '6':{name:'映画',className:'genre-6'},
+  '7':{name:'アニメ／特撮',className:'genre-7'},
+  '8':{name:'ドキュメンタリー／教養',className:'genre-8'},
+  '9':{name:'劇場／公演',className:'genre-9'},
+  'a':{name:'趣味／教育',className:'genre-a'},
+  'b':{name:'福祉',className:'genre-b'},
+  'f':{name:'その他',className:'genre-f'},
+  unknown:{name:'ジャンル不明',className:'genre-unknown'},
+}
 const api = path => new URL(path, document.baseURI)
 const pad=n=>String(n).padStart(2,'0')
 const localDate=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`
+const genreKey=code=>{const key=String(code||'').toLowerCase().replace('0x','');return genreMeta[key]?key:'unknown'}
 function broadcastToday(){const d=new Date();if(d.getHours()<5)d.setDate(d.getDate()-1);return localDate(d)}
 function shift(days){const [y,m,d]=dateInput.value.split('-').map(Number), value=new Date(y,m-1,d);value.setDate(value.getDate()+days);dateInput.value=localDate(value);load()}
 
@@ -22,6 +39,8 @@ function buildGenres(){
   schedule.channels.forEach(c=>c.programs.forEach(p=>{if(p.genreCode&&p.genreName)genres.set(p.genreCode,p.genreName)}))
   $('genre').innerHTML='<option value="all">全ジャンル</option>'+[...genres].sort().map(([k,v])=>`<option value="${k}">${escapeHtml(v)}</option>`).join('')
   if(genres.has(value))$('genre').value=value
+  const keys=new Set([...genres.keys()].map(genreKey));if(schedule.channels.some(c=>c.programs.some(p=>!p.genreCode)))keys.add('unknown')
+  $('legend-items').innerHTML=[...keys].sort().map(key=>`<span class="legend-item ${genreMeta[key].className}"><i></i>${escapeHtml(genreMeta[key].name)}</span>`).join('')
 }
 function render(){
   const band=$('band').value, genre=$('genre').value
@@ -62,8 +81,11 @@ function render(){
     const col=document.createElement('div');col.className='column'
     for(const p of channel.programs){const a=Math.max(start,new Date(p.startAt).getTime()),b=Math.min(end,new Date(p.endAt).getTime());if(b<=a)continue
       const first=Math.max(0,Math.floor((a-start)/60000)),last=Math.min(totalMinutes,Math.ceil((b-start)/60000))
-      const box=document.createElement('article');box.className=`program g${parseInt(p.genreCode||'8',16)%8}`;box.style.top=`${cumulativePixels[first]}px`;box.style.height=`${Math.max(2,cumulativePixels[last]-cumulativePixels[first]-2)}px`;box.title=`${p.genreName||''} ${p.title}`
-      box.innerHTML=`<time>${pad(new Date(p.startAt).getHours())}:${pad(new Date(p.startAt).getMinutes())}–${pad(new Date(p.endAt).getHours())}:${pad(new Date(p.endAt).getMinutes())}</time><strong>${escapeHtml(p.title)}</strong>`;col.append(box)} guide.append(col)
+      const height=Math.max(2,cumulativePixels[last]-cumulativePixels[first]-2),meta=genreMeta[genreKey(p.genreCode)]
+      const sizeClass=height>=52?'with-badge':height<36?'tiny':'compact'
+      const box=document.createElement('article');box.className=`program ${meta.className} ${sizeClass}`;box.style.top=`${cumulativePixels[first]}px`;box.style.height=`${height}px`;box.title=`${p.genreName||meta.name}: ${p.title}`
+      const badge=height>=52?`<span class="genre-badge">${escapeHtml(p.genreName||meta.name)}</span>`:''
+      box.innerHTML=`<div class="program-meta"><time>${pad(new Date(p.startAt).getHours())}:${pad(new Date(p.startAt).getMinutes())}–${pad(new Date(p.endAt).getHours())}:${pad(new Date(p.endAt).getMinutes())}</time>${badge}</div><strong>${escapeHtml(p.title)}</strong>`;col.append(box)} guide.append(col)
   }
   if(!channels.length)guide.innerHTML+='<div class="message">該当する番組がありません</div>'
   const now=Date.now();if(now>=start&&now<end){const minute=Math.min(totalMinutes,Math.max(0,Math.floor((now-start)/60000)));const line=document.createElement('div');line.className='now';line.style.top=`${48+cumulativePixels[minute]}px`;guide.append(line)}
