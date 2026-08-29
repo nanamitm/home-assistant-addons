@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>JK EPG</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <header>
+    <button id="prev" aria-label="前日">‹</button>
+    <input id="date" type="date">
+    <button id="today">今日</button>
+    <button id="next" aria-label="翌日">›</button>
+    <select id="band" aria-label="放送波">
+      <option value="all">すべて</option>
+      <option value="terrestrial">地上波</option>
+      <option value="bs">BS・CS</option>
+    </select>
+    <select id="genre" aria-label="ジャンル"><option value="all">全ジャンル</option></select>
+    <button id="reload">更新</button>
+    <span id="status" role="status"></span>
+  </header>
+  <main id="viewport">
+    <div id="loading">番組表を読み込んでいます…</div>
+    <div id="guide" hidden></div>
+  </main>
+  <footer>番組情報は各提供元から取得しています。NHK番組の情報提供: NHK</footer>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

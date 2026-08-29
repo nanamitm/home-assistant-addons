@@ -1,0 +1,20 @@
+configuration:
+  timezone:
+    name: タイムゾーン
+  update_interval:
+    name: 更新間隔
+    description: 番組表を再取得する間隔（秒）
+  retention_days:
+    name: 保存日数
+  nhk_area:
+    name: NHK地域コード
+  nhk_api_key:
+    name: NHK番組APIキー
+  enable_atx:
+    name: AT-Xを取得
+  enable_ouj:
+    name: 放送大学を取得
+  enable_subchannels:
+    name: BSサブチャンネルを取得
+network:
+  8099/tcp: Web UI（Ingressを使わない場合）

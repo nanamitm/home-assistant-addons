@@ -1,0 +1,58 @@
+namespace jkcnsl_cache;
+
+public record ChannelInfo(int Id, string Name, string Video, bool Bs);
+
+public static class ChannelList
+{
+    public static readonly IReadOnlyList<ChannelInfo> All = new ChannelInfo[]
+    {
+        new(1,   "NHK総合",              "jk1",   false),
+        new(2,   "NHK Eテレ",            "jk2",   false),
+        new(4,   "日本テレビ",            "jk4",   false),
+        new(5,   "テレビ朝日",            "jk5",   false),
+        new(6,   "TBSテレビ",            "jk6",   false),
+        new(7,   "テレビ東京",            "jk7",   false),
+        new(8,   "フジテレビ",            "jk8",   false),
+        new(9,   "TOKYO MX",             "jk9",   false),
+        new(10,  "テレ玉",               "jk10",  false),
+        new(11,  "tvk",                  "jk11",  false),
+        new(12,  "チバテレビ",            "jk12",  false),
+        new(13,  "サンテレビ",            "jk13",  false),
+        new(14,  "KBS京都",              "jk14",  false),
+        new(101, "NHK BS",               "jk101", true),
+        new(102, "NHK BSサブ",           "jk102", true),
+        new(103, "NHK BSプレミアム4K",     "jk103", true),
+        new(104, "NHK BS8K",              "jk104", true),
+        new(141, "BS日テレ",             "jk141", true),
+        new(142, "BS日テレサブ",         "jk142", true),
+        new(151, "BS朝日",               "jk151", true),
+        new(161, "BS-TBS",               "jk161", true),
+        new(162, "BS-TBSサブ",           "jk162", true),
+        new(171, "BSテレ東",             "jk171", true),
+        new(181, "BSフジ",               "jk181", true),
+        new(182, "BSフジサブ",           "jk182", true),
+        new(191, "WOWOW PRIME",          "jk191", true),
+        new(192, "WOWOW LIVE",           "jk192", true),
+        new(193, "WOWOW CINEMA",         "jk193", true),
+        new(200, "BS10",                 "jk200", true),
+        new(201, "BS10スターチャンネル",   "jk201", true),
+        new(211, "BS11",                 "jk211", true),
+        new(222, "BS12",                 "jk222", true),
+        new(231, "放送大学テレビ",        "jk231", true),
+        new(232, "放送大学テレビ",        "jk232", true),
+        new(234, "グリーンチャンネル",   "jk234", true),
+        new(236, "BSアニマックス",        "jk236", true),
+        new(242, "J SPORTS 1",           "jk242", true),
+        new(243, "J SPORTS 2",           "jk243", true),
+        new(244, "J SPORTS 3",           "jk244", true),
+        new(245, "J SPORTS 4",           "jk245", true),
+        new(251, "BS釣りビジョン",       "jk251", true),
+        new(252, "WOWOW PLUS",           "jk252", true),
+        new(255, "日本映画専門ch",       "jk255", true),
+        new(256, "ディズニーch",         "jk256", true),
+        new(260, "J:COM BS",             "jk260", true),
+        new(265, "BSよしもと",            "jk265", true),
+        new(333, "AT-X",                 "jk333", true),
+        new(531, "放送大学ラジオ",        "jk531", true),
+    };
+}
