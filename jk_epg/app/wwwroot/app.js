@@ -63,10 +63,26 @@ async function load(){
   try{
     const response=await fetch(api(`api/programs/schedule?date=${encodeURIComponent(dateInput.value)}`),{cache:'no-store'})
     if(!response.ok)throw new Error(`${response.status} ${response.statusText}`)
-    schedule=await response.json(); buildChannels(); buildGenres(); render()
+    schedule=await response.json(); buildChannels(); buildGenres(); render(); fetchEpgStatus()
     status.textContent=schedule.loaded?`更新 ${schedule.updatedAt?new Date(schedule.updatedAt).toLocaleTimeString('ja-JP'):'キャッシュ'}`:'データなし'
   }catch(error){loading.textContent=`取得失敗: ${error.message}`;status.textContent='エラー';return}
   loading.hidden=true
+}
+const statusTime=value=>value?new Date(value).toLocaleString('ja-JP'):'—'
+async function fetchEpgStatus(){
+  try{
+    const response=await fetch(api('api/programs/status'),{cache:'no-store'});if(!response.ok)throw new Error(`${response.status}`)
+    const data=await response.json();$('epg-status-summary').textContent=`最終成功: ${statusTime(data.lastSuccessAt)} / 次回予定: ${statusTime(data.nextScheduledAt)} / ${data.cachedChannels}局 ${data.cachedPrograms}番組`
+    const sources=$('epg-source-status');sources.innerHTML=''
+    for(const source of data.sources){const row=document.createElement('div');row.className=`source-state ${source.state}`;row.innerHTML=`<span>${escapeHtml(source.name)}</span><strong>${source.state==='disabled'?'無効':source.state==='ok'?'正常':'待機中'}</strong><time>${statusTime(source.lastSuccessAt)}</time>`;sources.append(row)}
+    $('epg-refresh').disabled=data.refreshing
+  }catch(error){$('epg-status-summary').textContent=`状態取得失敗: ${error.message}`}
+}
+async function refreshEpg(){
+  const button=$('epg-refresh'),result=$('epg-refresh-result');button.disabled=true;result.textContent='外部EPGを取得しています…'
+  try{const response=await fetch(api('api/programs/refresh'),{method:'POST'});if(!response.ok)throw new Error(`${response.status} ${await response.text()}`);result.textContent='外部EPGを更新しました';await load()}
+  catch(error){result.textContent=`更新失敗: ${error.message}`;await fetchEpgStatus()}
+  finally{button.disabled=false}
 }
 function saveChannelSelection(){
   try{localStorage.setItem(channelStorageKey,JSON.stringify([...selectedChannels]))}catch{}
@@ -225,4 +241,4 @@ function setViewMode(mode){
   viewMode=mode;$('view-guide').classList.toggle('active',mode==='guide');$('view-now-next').classList.toggle('active',mode==='now-next');render()
 }
 function escapeHtml(s){const e=document.createElement('span');e.textContent=s;return e.innerHTML}
-dateInput.value=broadcastToday();$('prev').onclick=()=>shift(-1);$('next').onclick=()=>shift(1);$('today').onclick=showCurrentTime;$('now').onclick=showCurrentTime;$('reload').onclick=load;$('view-guide').onclick=()=>setViewMode('guide');$('view-now-next').onclick=()=>setViewMode('now-next');dateInput.onchange=load;$('band').onchange=render;$('program-search').oninput=event=>{searchQuery=event.target.value.trim().toLocaleLowerCase('ja');render()};$('favorite-only').onchange=event=>{favoriteOnly=event.target.checked;saveChannelPreferences();render()};$('genre-filter-clear').onclick=()=>{selectedGenres.clear();saveGenreSelection();buildGenres();render()};$('dialog-close').onclick=()=>$('program-dialog').close();$('program-dialog').onclick=event=>{if(event.target===$('program-dialog'))$('program-dialog').close()};document.querySelectorAll('[data-channel-selection]').forEach(button=>button.onclick=()=>selectChannelGroup(button.dataset.channelSelection));load()
+dateInput.value=broadcastToday();$('prev').onclick=()=>shift(-1);$('next').onclick=()=>shift(1);$('today').onclick=showCurrentTime;$('now').onclick=showCurrentTime;$('reload').onclick=load;$('epg-refresh').onclick=refreshEpg;$('view-guide').onclick=()=>setViewMode('guide');$('view-now-next').onclick=()=>setViewMode('now-next');dateInput.onchange=load;$('band').onchange=render;$('program-search').oninput=event=>{searchQuery=event.target.value.trim().toLocaleLowerCase('ja');render()};$('favorite-only').onchange=event=>{favoriteOnly=event.target.checked;saveChannelPreferences();render()};$('genre-filter-clear').onclick=()=>{selectedGenres.clear();saveGenreSelection();buildGenres();render()};$('dialog-close').onclick=()=>$('program-dialog').close();$('program-dialog').onclick=event=>{if(event.target===$('program-dialog'))$('program-dialog').close()};document.querySelectorAll('[data-channel-selection]').forEach(button=>button.onclick=()=>selectChannelGroup(button.dataset.channelSelection));load()

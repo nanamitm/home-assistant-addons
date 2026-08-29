@@ -15,6 +15,13 @@ app.UseDefaultFiles();
 app.UseStaticFiles();
 
 app.MapGet("/api/health", () => Results.Json(new { status = "ok" }));
+app.MapGet("/api/programs/status", (ProgramInfoService programs) => Results.Json(programs.CreateStatusPayload()));
+app.MapPost("/api/programs/refresh", async (HttpContext context, ProgramInfoService programs) =>
+{
+    try { return Results.Json(await programs.RefreshNowAsync(context.RequestAborted)); }
+    catch (OperationCanceledException) { return Results.StatusCode(499); }
+    catch (Exception error) { return Results.Problem(title: "EPG refresh failed", detail: error.Message); }
+});
 
 app.MapGet("/api/programs/current", (ProgramInfoService programs, ChannelCatalog catalog) =>
     Results.Json(new {

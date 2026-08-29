@@ -22,6 +22,7 @@ public sealed class ProgramInfoService : BackgroundService
     private readonly Dictionary<string, ProgramInfo> _currentPrograms = new();
     private readonly Dictionary<string, List<EpgProgram>> _epgPrograms = new();
     private readonly HashSet<DateOnly> _loadedBroadcastDates = new();
+    private readonly SemaphoreSlim _refreshLock = new(1, 1);
     private DateOnly? _loadedNhkBroadcastDate;
     private DateOnly? _loadedAtxBroadcastDate;
     private DateOnly? _loadedOujBroadcastDate;
@@ -202,6 +203,61 @@ public sealed class ProgramInfoService : BackgroundService
         };
     }
 
+    public object CreateStatusPayload()
+    {
+        int channels;
+        int programs;
+        lock (_lock)
+        {
+            channels = _epgPrograms.Count;
+            programs = _epgPrograms.Values.Sum(items => items.Count);
+        }
+        var interval = TimeSpan.FromSeconds(Math.Max(60,
+            _config.GetValue<int>("CacheServer:ProgramInfoUpdateIntervalSeconds", 1200)));
+        static string? Stamp(DateTimeOffset value) => value == DateTimeOffset.MinValue ? null : value.ToString("O");
+        object Source(string key, string name, bool enabled, DateTimeOffset lastSuccess) => new
+        {
+            key, name, enabled, lastSuccessAt = Stamp(lastSuccess),
+            state = !enabled ? "disabled" : lastSuccess == DateTimeOffset.MinValue ? "waiting" : "ok"
+        };
+        var nhkKey = _config["CacheServer:NhkProgramApi:API_Key"] ?? _config["CacheServer:NhkProgramApi:ApiKey"];
+        return new
+        {
+            refreshing = _refreshLock.CurrentCount == 0,
+            lastSuccessAt = Stamp(_lastFetchUtc),
+            lastFailureAt = Stamp(_lastRefreshFailureUtc),
+            nextScheduledAt = _lastFetchUtc == DateTimeOffset.MinValue ? null : Stamp(_lastFetchUtc.Add(interval)),
+            cachedChannels = channels,
+            cachedPrograms = programs,
+            sources = new[]
+            {
+                Source("tver", "TVer", true, _lastFetchUtc),
+                Source("nhk", "NHK番組API", !string.IsNullOrWhiteSpace(nhkKey), _lastNhkFetchUtc),
+                Source("atx", "AT-X", _config.GetValue<bool>("CacheServer:AtxProgram:Enabled", true), _lastAtxFetchUtc),
+                Source("ouj", "放送大学", _config.GetValue<bool>("CacheServer:OujProgram:Enabled", true), _lastOujFetchUtc),
+                Source("bs4", "BS日テレサブ", _config.GetValue<bool>("CacheServer:Bs4SubChannelProgram:Enabled", true), _lastBs4SubChannelFetchUtc),
+                Source("bstbs", "BS-TBSサブ", _config.GetValue<bool>("CacheServer:BsTbsSubChannelProgram:Enabled", true), _lastBsTbsSubChannelFetchUtc),
+                Source("bsfuji", "BSフジサブ", _config.GetValue<bool>("CacheServer:BsFujiSubChannelProgram:Enabled", true), _lastBsFujiSubChannelFetchUtc),
+            }
+        };
+    }
+
+    public async Task<object> RefreshNowAsync(CancellationToken ct)
+    {
+        try
+        {
+            await RunRefreshLockedAsync(GetBroadcastDate(DateTimeOffset.UtcNow), ct);
+            _lastRefreshFailureUtc = DateTimeOffset.MinValue;
+            EvaluateCurrentPrograms(DateTimeOffset.UtcNow);
+            return CreateStatusPayload();
+        }
+        catch
+        {
+            _lastRefreshFailureUtc = DateTimeOffset.UtcNow;
+            throw;
+        }
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var refreshInterval = TimeSpan.FromSeconds(Math.Max(60,
@@ -227,7 +283,7 @@ public sealed class ProgramInfoService : BackgroundService
                             now = DateTimeOffset.UtcNow;
                             broadcastDate = GetBroadcastDate(now);
                         }
-                        await RefreshEpgWithTimeoutAsync(broadcastDate, stoppingToken);
+                        await RunRefreshLockedAsync(broadcastDate, stoppingToken);
                         _lastRefreshFailureUtc = DateTimeOffset.MinValue;
                     }
                 }
@@ -269,6 +325,13 @@ public sealed class ProgramInfoService : BackgroundService
         {
             throw new TimeoutException($"[ProgramInfo] EPG refresh timed out after {timeout}");
         }
+    }
+
+    private async Task RunRefreshLockedAsync(DateOnly broadcastDate, CancellationToken ct)
+    {
+        await _refreshLock.WaitAsync(ct);
+        try { await RefreshEpgWithTimeoutAsync(broadcastDate, ct); }
+        finally { _refreshLock.Release(); }
     }
 
     private async Task RefreshEpgAsync(DateOnly broadcastDate, CancellationToken ct)

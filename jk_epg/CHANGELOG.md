@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.13
+
+- Add aggregate and source-level EPG acquisition status.
+- Add an explicit manual external-EPG refresh action with concurrency protection.
+- Rename the existing button to Display refresh to distinguish the two operations.
+
 ## 0.1.12
 
 - Add a responsive current/next program view alongside the full schedule.

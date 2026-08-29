@@ -44,7 +44,16 @@
     </details>
     <input id="program-search" type="search" placeholder="番組名を検索" aria-label="番組名を検索">
     <span id="search-count"></span>
-    <button id="reload">更新</button>
+    <button id="reload">表示更新</button>
+    <details id="epg-status">
+      <summary>取得状態</summary>
+      <div id="epg-status-panel">
+        <div id="epg-status-summary">確認中…</div>
+        <div id="epg-source-status"></div>
+        <button id="epg-refresh" type="button">外部EPGを今すぐ取得</button>
+        <div id="epg-refresh-result" role="status"></div>
+      </div>
+    </details>
     <div class="view-switch" role="group" aria-label="表示形式">
       <button id="view-guide" type="button" class="active">番組表</button>
       <button id="view-now-next" type="button">現在・次</button>
