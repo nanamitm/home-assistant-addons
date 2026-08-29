@@ -1,5 +1,5 @@
 name: JK EPG
-version: "0.1.4"
+version: "0.1.5"
 slug: jk_epg
 description: 日本のテレビ番組表を取得してHome Assistantで表示します
 url: https://github.com/nanamitm/home-assistant-addons/tree/main/jk_epg

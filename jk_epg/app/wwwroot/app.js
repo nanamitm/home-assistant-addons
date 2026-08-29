@@ -2,6 +2,11 @@ const $ = id => document.getElementById(id)
 const dateInput=$('date'), guide=$('guide'), loading=$('loading'), status=$('status')
 let schedule=null
 const selectedGenres=new Set()
+const channelStorageKey='jk-epg-selected-channels'
+let savedChannels=null
+try{const value=localStorage.getItem(channelStorageKey);if(value!==null){const parsed=JSON.parse(value);if(Array.isArray(parsed))savedChannels=parsed}}catch{}
+const selectedChannels=new Set(savedChannels||[])
+let channelSelectionInitialized=savedChannels!==null
 const genreMeta={
   '0':{name:'ニュース／報道',className:'genre-0'},
   '1':{name:'スポーツ',className:'genre-1'},
@@ -30,10 +35,39 @@ async function load(){
   try{
     const response=await fetch(api(`api/programs/schedule?date=${encodeURIComponent(dateInput.value)}`),{cache:'no-store'})
     if(!response.ok)throw new Error(`${response.status} ${response.statusText}`)
-    schedule=await response.json(); buildGenres(); render()
+    schedule=await response.json(); buildChannels(); buildGenres(); render()
     status.textContent=schedule.loaded?`更新 ${schedule.updatedAt?new Date(schedule.updatedAt).toLocaleTimeString('ja-JP'):'キャッシュ'}`:'データなし'
   }catch(error){loading.textContent=`取得失敗: ${error.message}`;status.textContent='エラー';return}
   loading.hidden=true;guide.hidden=false
+}
+function saveChannelSelection(){
+  try{localStorage.setItem(channelStorageKey,JSON.stringify([...selectedChannels]))}catch{}
+}
+function buildChannels(){
+  const available=new Set(schedule.channels.map(channel=>channel.video))
+  if(!channelSelectionInitialized){for(const video of available)selectedChannels.add(video);channelSelectionInitialized=true;saveChannelSelection()}
+  else{let changed=false;for(const video of [...selectedChannels])if(!available.has(video)){selectedChannels.delete(video);changed=true}if(changed)saveChannelSelection()}
+  const options=$('channel-filter-options');options.innerHTML=''
+  for(const channel of schedule.channels){
+    const label=document.createElement('label');label.className='channel-filter-option'
+    const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.value=channel.video;checkbox.checked=selectedChannels.has(channel.video)
+    checkbox.addEventListener('change',()=>{checkbox.checked?selectedChannels.add(channel.video):selectedChannels.delete(channel.video);saveChannelSelection();updateChannelFilterSummary();render()})
+    const name=document.createElement('span');name.textContent=channel.name
+    const video=document.createElement('small');video.textContent=channel.video
+    label.append(checkbox,name,video);options.append(label)
+  }
+  updateChannelFilterSummary()
+}
+function updateChannelFilterSummary(){
+  const total=schedule.channels.length,count=schedule.channels.filter(channel=>selectedChannels.has(channel.video)).length
+  $('channel-filter-summary').textContent=count===total?`全${total}局`:`表示 ${count}/${total}局`
+}
+function selectChannelGroup(group){
+  selectedChannels.clear()
+  for(const channel of schedule.channels){
+    if(group==='all'||(group==='terrestrial'&&!channel.bs)||(group==='bs'&&channel.bs))selectedChannels.add(channel.video)
+  }
+  $('band').value='all';saveChannelSelection();buildChannels();render()
 }
 function buildGenres(){
   const genres=new Map()
@@ -58,7 +92,7 @@ function updateGenreFilterSummary(genres){
 function render(){
   const band=$('band').value
   const channels=schedule.channels
-    .filter(c=>band==='all'||(band==='bs')===c.bs)
+    .filter(c=>selectedChannels.has(c.video)&&(band==='all'||(band==='bs')===c.bs))
     .map(c=>({...c,programs:selectedGenres.size===0?c.programs:c.programs.filter(p=>selectedGenres.has(p.genreCode||'__unknown__'))}))
     .filter(c=>c.programs.length>0)
   guide.style.setProperty('--count',Math.max(1,channels.length)); guide.innerHTML='<div class="corner">時刻</div>'+channels.map(c=>`<div class="channel">${escapeHtml(c.name)}</div>`).join('')
@@ -107,4 +141,4 @@ function render(){
   const now=Date.now();if(now>=start&&now<end){const minute=Math.min(totalMinutes,Math.max(0,Math.floor((now-start)/60000)));const line=document.createElement('div');line.className='now';line.style.top=`${48+cumulativePixels[minute]}px`;guide.append(line)}
 }
 function escapeHtml(s){const e=document.createElement('span');e.textContent=s;return e.innerHTML}
-dateInput.value=broadcastToday();$('prev').onclick=()=>shift(-1);$('next').onclick=()=>shift(1);$('today').onclick=()=>{dateInput.value=broadcastToday();load()};$('reload').onclick=load;dateInput.onchange=load;$('band').onchange=render;$('genre-filter-clear').onclick=()=>{selectedGenres.clear();buildGenres();render()};load()
+dateInput.value=broadcastToday();$('prev').onclick=()=>shift(-1);$('next').onclick=()=>shift(1);$('today').onclick=()=>{dateInput.value=broadcastToday();load()};$('reload').onclick=load;dateInput.onchange=load;$('band').onchange=render;$('genre-filter-clear').onclick=()=>{selectedGenres.clear();buildGenres();render()};document.querySelectorAll('[data-channel-selection]').forEach(button=>button.onclick=()=>selectChannelGroup(button.dataset.channelSelection));load()

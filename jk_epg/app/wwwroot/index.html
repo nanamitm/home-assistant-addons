@@ -17,6 +17,18 @@
       <option value="terrestrial">地上波</option>
       <option value="bs">BS・CS</option>
     </select>
+    <details id="channel-filter">
+      <summary id="channel-filter-summary">表示チャンネル</summary>
+      <div id="channel-filter-panel">
+        <div class="channel-filter-actions">
+          <button type="button" data-channel-selection="all">全選択</button>
+          <button type="button" data-channel-selection="terrestrial">地上波</button>
+          <button type="button" data-channel-selection="bs">BS・CS</button>
+          <button type="button" data-channel-selection="none">全解除</button>
+        </div>
+        <div id="channel-filter-options"></div>
+      </div>
+    </details>
     <details id="genre-filter">
       <summary id="genre-filter-summary">全ジャンル</summary>
       <div id="genre-filter-panel">

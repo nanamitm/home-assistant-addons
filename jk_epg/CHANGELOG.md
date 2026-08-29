@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.5
+
+- Add a checkbox panel for choosing which channels appear in the schedule.
+- Persist channel selections in browser local storage.
+- Add shortcuts for all, terrestrial, BS/CS and no channels.
+
 ## 0.1.4
 
 - Replace the single-choice genre selector with a multi-select checkbox panel.
