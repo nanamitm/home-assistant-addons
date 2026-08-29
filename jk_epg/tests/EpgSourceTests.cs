@@ -28,4 +28,20 @@ public sealed class EpgSourceTests
         Assert.False(new AtxEpgSource().IsEnabled(config));
         Assert.True(new TVerEpgSource().IsEnabled(config));
     }
+
+    [Fact]
+    public async Task MonitorExposesResponseShapeFailuresAndRecovers()
+    {
+        var monitor = new EpgSourceMonitor();
+        await monitor.ObserveAsync("tver", () => Task.FromResult(false), () => 0);
+        var failed = monitor.Get("tver");
+        Assert.Equal(1, failed.ConsecutiveFailures);
+        Assert.Equal("empty_or_invalid_response", failed.Error);
+
+        await monitor.ObserveAsync("tver", () => Task.FromResult(true), () => 42);
+        var recovered = monitor.Get("tver");
+        Assert.Equal(0, recovered.ConsecutiveFailures);
+        Assert.Equal(42, recovered.ItemCount);
+        Assert.NotNull(recovered.LastSuccessAt);
+    }
 }

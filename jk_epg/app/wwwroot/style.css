@@ -16,7 +16,7 @@ button { cursor:pointer } #status { color:var(--muted); margin-left:auto }
 #epg-status-panel { position:absolute; top:42px; right:0; z-index:23; width:430px; padding:11px; border:1px solid #4b5563; border-radius:8px; background:#111827; box-shadow:0 10px 30px #0009 }
 #epg-status-summary,#epg-refresh-result { color:var(--muted); font-size:11px; line-height:1.5 }
 #epg-source-status { display:grid; gap:4px; margin:9px 0 }
-.source-state { display:grid; grid-template-columns:1fr 45px 130px; gap:8px; align-items:center; font-size:11px }.source-state strong { color:#fbbf24 }.source-state.ok strong { color:#4ade80 }.source-state.disabled strong { color:var(--muted) }.source-state time { color:var(--muted); text-align:right }
+.source-state { display:grid; grid-template-columns:1fr 55px minmax(130px,auto); gap:8px; align-items:center; font-size:11px }.source-state strong { color:#fbbf24 }.source-state.ok strong { color:#4ade80 }.source-state.error strong { color:#fb7185 }.source-state.disabled strong { color:var(--muted) }.source-state time { color:var(--muted); text-align:right }
 #epg-refresh { width:100%; margin:3px 0 7px }
 #channel-filter-panel { position:absolute; top:42px; left:0; z-index:22; width:420px; padding:10px; border:1px solid #4b5563; border-radius:8px; background:#111827; box-shadow:0 10px 30px #0009 }
 .channel-filter-actions { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; margin-bottom:8px }

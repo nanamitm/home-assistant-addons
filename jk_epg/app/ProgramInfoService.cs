@@ -17,6 +17,7 @@ public sealed class ProgramInfoService : BackgroundService
     private readonly ChannelCatalog _channelCatalog;
     private readonly EpgStorageService _epgStorage;
     private readonly EpgSourceRegistry _sources;
+    private readonly EpgSourceMonitor _sourceMonitor;
     private readonly HttpClient _http;
     private readonly TimeZoneInfo _timeZone;
     private readonly string _nhkArea;
@@ -103,7 +104,7 @@ public sealed class ProgramInfoService : BackgroundService
 
     public ProgramInfoService(IConfiguration config, ILogger<ProgramInfoService> logger,
         ChannelsStreamBroadcaster broadcaster, ChannelCatalog channelCatalog,
-        EpgStorageService epgStorage, EpgSourceRegistry sources)
+        EpgStorageService epgStorage, EpgSourceRegistry sources, EpgSourceMonitor sourceMonitor)
     {
         _config = config;
         _logger = logger;
@@ -111,6 +112,7 @@ public sealed class ProgramInfoService : BackgroundService
         _channelCatalog = channelCatalog;
         _epgStorage = epgStorage;
         _sources = sources;
+        _sourceMonitor = sourceMonitor;
         _timeZone = ResolveTimeZone(config["CacheServer:BroadcastTimeZone"] ?? "Asia/Tokyo");
         _nhkArea = config["CacheServer:NhkProgramApi:Area"] ?? "130";
         _http = new HttpClient(new SocketsHttpHandler
@@ -218,14 +220,28 @@ public sealed class ProgramInfoService : BackgroundService
         var interval = TimeSpan.FromSeconds(Math.Max(60,
             _config.GetValue<int>("CacheServer:ProgramInfoUpdateIntervalSeconds", 1200)));
         static string? Stamp(DateTimeOffset value) => value == DateTimeOffset.MinValue ? null : value.ToString("O");
-        object Source(IEpgSource source, DateTimeOffset lastSuccess) => new
+        object Source(IEpgSource source, DateTimeOffset legacyLastSuccess)
         {
-            key = source.Key,
-            name = source.Name,
-            enabled = source.IsEnabled(_config),
-            lastSuccessAt = Stamp(lastSuccess),
-            state = !source.IsEnabled(_config) ? "disabled" : lastSuccess == DateTimeOffset.MinValue ? "waiting" : "ok"
-        };
+            var enabled = source.IsEnabled(_config);
+            var observed = _sourceMonitor.Get(source.Key);
+            var lastSuccess = observed.LastSuccessAt ??
+                (legacyLastSuccess == DateTimeOffset.MinValue ? null : legacyLastSuccess);
+            return new
+            {
+                key = source.Key,
+                name = source.Name,
+                enabled,
+                state = !enabled ? "disabled" : observed.ConsecutiveFailures > 0 ? "error" :
+                    lastSuccess == null ? "waiting" : "ok",
+                lastAttemptAt = observed.LastAttemptAt?.ToString("O"),
+                lastSuccessAt = lastSuccess?.ToString("O"),
+                lastFailureAt = observed.LastFailureAt?.ToString("O"),
+                durationMs = observed.DurationMs,
+                itemCount = observed.ItemCount,
+                consecutiveFailures = observed.ConsecutiveFailures,
+                error = observed.Error,
+            };
+        }
         return new
         {
             refreshing = _refreshLock.CurrentCount == 0,
@@ -345,8 +361,12 @@ public sealed class ProgramInfoService : BackgroundService
         var jikkyoToTVer = CreateTVerProgramMap();
         var targets = jikkyoToTVer.Values.Select(info => (info.Type, info.Area)).Distinct().ToArray();
 
-        await FetchTVerProgramsAsync(broadcastDate, newEpgPrograms, jikkyoToTVer, targets, ct);
-        await FetchTVerProgramsAsync(broadcastDate.AddDays(1), newEpgPrograms, jikkyoToTVer, targets, ct);
+        await _sourceMonitor.ObserveAsync("tver", async () =>
+        {
+            await FetchTVerProgramsAsync(broadcastDate, newEpgPrograms, jikkyoToTVer, targets, ct);
+            await FetchTVerProgramsAsync(broadcastDate.AddDays(1), newEpgPrograms, jikkyoToTVer, targets, ct);
+            return newEpgPrograms.Values.Sum(programs => programs.Count) > 0;
+        }, () => newEpgPrograms.Values.Sum(programs => programs.Count));
 
         var now = DateTimeOffset.UtcNow;
         var nhkRefreshInterval = TimeSpan.FromSeconds(Math.Max(3600,
@@ -359,7 +379,8 @@ public sealed class ProgramInfoService : BackgroundService
             if (now - _lastNhkAttemptUtc >= nhkFailureRetryInterval)
             {
                 _lastNhkAttemptUtc = now;
-                if (await FetchNhkProgramsAsync(broadcastDate, newEpgPrograms, ct))
+                if (await ObserveSourceAsync("nhk", () => FetchNhkProgramsAsync(broadcastDate, newEpgPrograms, ct),
+                    newEpgPrograms, JikkyoToNhkService.Keys))
                 {
                     CopyMissingExistingNhkPrograms(broadcastDate, newEpgPrograms);
                     _loadedNhkBroadcastDate = broadcastDate;
@@ -390,7 +411,8 @@ public sealed class ProgramInfoService : BackgroundService
             if (now - _lastAtxAttemptUtc >= atxFailureRetryInterval)
             {
                 _lastAtxAttemptUtc = now;
-                if (await FetchAtxProgramsAsync(broadcastDate, newEpgPrograms, ct))
+                if (await ObserveSourceAsync("atx", () => FetchAtxProgramsAsync(broadcastDate, newEpgPrograms, ct),
+                    newEpgPrograms, ["jk333"]))
                 {
                     _loadedAtxBroadcastDate = broadcastDate;
                     _lastAtxFetchUtc = now;
@@ -420,7 +442,8 @@ public sealed class ProgramInfoService : BackgroundService
             if (now - _lastOujAttemptUtc >= oujFailureRetryInterval)
             {
                 _lastOujAttemptUtc = now;
-                if (await FetchOujProgramsAsync(broadcastDate, newEpgPrograms, ct))
+                if (await ObserveSourceAsync("ouj", () => FetchOujProgramsAsync(broadcastDate, newEpgPrograms, ct),
+                    newEpgPrograms, ["jk531"]))
                 {
                     _loadedOujBroadcastDate = broadcastDate;
                     _lastOujFetchUtc = now;
@@ -450,7 +473,8 @@ public sealed class ProgramInfoService : BackgroundService
             if (now - _lastBs4SubChannelAttemptUtc >= bs4FailureRetryInterval)
             {
                 _lastBs4SubChannelAttemptUtc = now;
-                if (await FetchBs4SubChannelProgramsAsync(broadcastDate, newEpgPrograms, ct))
+                if (await ObserveSourceAsync("bs4", () => FetchBs4SubChannelProgramsAsync(broadcastDate, newEpgPrograms, ct),
+                    newEpgPrograms, [_config["CacheServer:Bs4SubChannelProgram:ChannelVideo"] ?? "jk142"]))
                 {
                     _loadedBs4SubChannelBroadcastDate = broadcastDate;
                     _lastBs4SubChannelFetchUtc = now;
@@ -480,7 +504,8 @@ public sealed class ProgramInfoService : BackgroundService
             if (now - _lastBsTbsSubChannelAttemptUtc >= bsTbsFailureRetryInterval)
             {
                 _lastBsTbsSubChannelAttemptUtc = now;
-                if (await FetchBsTbsSubChannelProgramsAsync(broadcastDate, newEpgPrograms, ct))
+                if (await ObserveSourceAsync("bstbs", () => FetchBsTbsSubChannelProgramsAsync(broadcastDate, newEpgPrograms, ct),
+                    newEpgPrograms, [_config["CacheServer:BsTbsSubChannelProgram:ChannelVideo"] ?? "jk162"]))
                 {
                     _loadedBsTbsSubChannelBroadcastDate = broadcastDate;
                     _lastBsTbsSubChannelFetchUtc = now;
@@ -510,7 +535,8 @@ public sealed class ProgramInfoService : BackgroundService
             if (now - _lastBsFujiSubChannelAttemptUtc >= bsFujiFailureRetryInterval)
             {
                 _lastBsFujiSubChannelAttemptUtc = now;
-                if (await FetchBsFujiSubChannelProgramsAsync(broadcastDate, newEpgPrograms, ct))
+                if (await ObserveSourceAsync("bsfuji", () => FetchBsFujiSubChannelProgramsAsync(broadcastDate, newEpgPrograms, ct),
+                    newEpgPrograms, [_config["CacheServer:BsFujiSubChannelProgram:ChannelVideo"] ?? "jk182"]))
                 {
                     _loadedBsFujiSubChannelBroadcastDate = broadcastDate;
                     _lastBsFujiSubChannelFetchUtc = now;
@@ -551,6 +577,12 @@ public sealed class ProgramInfoService : BackgroundService
         _logger.LogDebug("[ProgramInfo] EPG を更新しました: {Date}-{NextDate} ({Count} channels)",
             broadcastDate, broadcastDate.AddDays(1), newEpgPrograms.Count);
     }
+
+    private Task<bool> ObserveSourceAsync(string key, Func<Task<bool>> operation,
+        IReadOnlyDictionary<string, List<EpgProgram>> programs, IEnumerable<string> channels) =>
+        _sourceMonitor.ObserveAsync(key, operation,
+            () => channels.Distinct(StringComparer.Ordinal)
+                .Where(programs.ContainsKey).Sum(channel => programs[channel].Count));
 
     public async Task<(int ImportedCount, bool CurrentChanged)> ImportProgramsAsync(
         string channel,

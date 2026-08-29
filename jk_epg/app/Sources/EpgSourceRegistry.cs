@@ -22,6 +22,7 @@ public static class EpgSourceServiceCollectionExtensions
         services.AddSingleton<IEpgSource, BsTbsSubChannelEpgSource>();
         services.AddSingleton<IEpgSource, BsFujiSubChannelEpgSource>();
         services.AddSingleton<EpgSourceRegistry>();
+        services.AddSingleton<EpgSourceMonitor>();
         return services;
     }
 }
