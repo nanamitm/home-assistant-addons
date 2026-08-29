@@ -10,6 +10,7 @@
 - `nhk_area`: NHK番組APIの地域コード。東京は `130` です。
 - `nhk_api_key`: NHK番組APIから発行されたAPIキー。空の場合、NHK固有チャンネルの一部は取得されません。
 - `enable_atx`, `enable_ouj`, `enable_subchannels`: 各補助取得元の有効・無効。
+- `install_ha_integration`: 番組センサーと番組表カレンダーを提供するカスタム統合をHome Assistantへ配置します。
 
 データベースはアドオンの永続領域 `/data/epg.db` に保存され、通常のHome Assistantバックアップ対象になります。
 
@@ -19,11 +20,24 @@ TVerのWeb向けAPIおよび一部放送局のWebページを利用するため�
 
 NHK番組APIを有効にした場合は、同APIの利用規約に従ってください。画面には「NHK番組の情報提供: NHK」を表示します。
 
+## Home Assistant連携
+
+1. `install_ha_integration` を有効にしてアドオンを起動します。
+2. Home Assistantを再起動します。
+3. 「設定」→「デバイスとサービス」→「統合を追加」から `JK EPG` を追加します。
+4. URLは通常、初期値の `http://1815012f-jk-epg:8099` のまま使用できます。
+
+統合を追加すると、チャンネルごとに現在の番組を状態、次の番組や開始・終了時刻を属性に持つセンサーと、全チャンネルの番組を含む読み取り専用カレンダーが作成されます。
+
+番組開始前の通知は、Home AssistantのオートメーションでJK EPGのカレンダーをトリガーに指定します。例えば開始10分前に通知する場合は、カレンダートリガーのオフセットを `-00:10:00` に設定し、アクションで使用する通知サービスを選択してください。番組名は `trigger.calendar_event.summary`、チャンネル名は `trigger.calendar_event.location` から参照できます。
+
 ## API
 
 - `GET api/health`
 - `GET api/programs/current`
 - `GET api/programs/schedule?date=YYYY-MM-DD`
 - `GET api/programs/schedule/range`
+- `GET api/programs/status`
+- `POST api/programs/refresh`
 
 Ingress以外からAPIを利用する場合は、ネットワーク設定で8099/tcpを公開してください。

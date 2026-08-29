@@ -16,5 +16,8 @@ configuration:
     name: 放送大学を取得
   enable_subchannels:
     name: BSサブチャンネルを取得
+  install_ha_integration:
+    name: Home Assistant連携を配置
+    description: 番組センサーと番組表カレンダーを提供するカスタム統合を設定ディレクトリへ配置します
 network:
   8099/tcp: Web UI（Ingressを使わない場合）

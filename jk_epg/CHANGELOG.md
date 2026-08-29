@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.14
+
+- Bundle an optional JK EPG custom integration and install it on add-on startup.
+- Add one current/next-program sensor per channel.
+- Add a read-only EPG calendar usable by Home Assistant calendar automations and notifications.
+
 ## 0.1.13
 
 - Add aggregate and source-level EPG acquisition status.

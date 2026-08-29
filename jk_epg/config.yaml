@@ -1,5 +1,5 @@
 name: JK EPG
-version: "0.1.13"
+version: "0.1.14"
 slug: jk_epg
 description: 日本のテレビ番組表を取得してHome Assistantで表示します
 url: https://github.com/nanamitm/home-assistant-addons/tree/main/jk_epg
@@ -20,6 +20,10 @@ ports:
   8099/tcp: null
 ports_description:
   8099/tcp: Web UI (Ingressを使わない場合のみ)
+map:
+  - type: homeassistant_config
+    read_only: false
+    path: /homeassistant
 options:
   timezone: Asia/Tokyo
   update_interval: 3600
@@ -29,6 +33,7 @@ options:
   enable_atx: true
   enable_ouj: true
   enable_subchannels: true
+  install_ha_integration: true
 schema:
   timezone: str
   update_interval: "int(3600,86400)"
@@ -38,3 +43,4 @@ schema:
   enable_atx: bool
   enable_ouj: bool
   enable_subchannels: bool
+  install_ha_integration: bool

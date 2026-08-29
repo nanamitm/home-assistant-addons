@@ -1,0 +1,13 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "JK EPG",
+        "description": "Connect to the JK EPG add-on.",
+        "data": {"url": "Add-on URL"}
+      }
+    },
+    "error": {"cannot_connect": "Unable to connect to the add-on."},
+    "abort": {"already_configured": "JK EPG is already configured."}
+  }
+}

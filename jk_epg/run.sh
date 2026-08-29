@@ -19,4 +19,11 @@ export CacheServer__BsFujiSubChannelProgram__Enabled="$(read_option enable_subch
 export EpgStorage__DbPath=/data/epg.db
 export EpgStorage__RetentionDays="$(read_option retention_days)"
 
+if [ "$(read_option install_ha_integration)" = "true" ]; then
+  integration_dir=/homeassistant/custom_components/jk_epg
+  mkdir -p "$integration_dir"
+  cp -R /opt/jk_epg_custom_component/. "$integration_dir/"
+  echo "JK EPG integration installed in $integration_dir"
+fi
+
 exec dotnet /app/JkEpg.dll
