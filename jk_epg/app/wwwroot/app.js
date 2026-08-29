@@ -1,6 +1,7 @@
 const $ = id => document.getElementById(id)
 const dateInput=$('date'), guide=$('guide'), loading=$('loading'), status=$('status')
 let schedule=null
+let scrollToNowRequested=true
 const genreStorageKey='jk-epg-selected-genres'
 let savedGenres=[]
 try{const value=localStorage.getItem(genreStorageKey);if(value!==null){const parsed=JSON.parse(value);if(Array.isArray(parsed))savedGenres=parsed}}catch{}
@@ -32,6 +33,11 @@ const localDate=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())
 const genreKey=code=>{const key=String(code||'').toLowerCase().replace('0x','');return genreMeta[key]?key:'unknown'}
 function broadcastToday(){const d=new Date();if(d.getHours()<5)d.setDate(d.getDate()-1);return localDate(d)}
 function shift(days){const [y,m,d]=dateInput.value.split('-').map(Number), value=new Date(y,m-1,d);value.setDate(value.getDate()+days);dateInput.value=localDate(value);load()}
+function showCurrentTime(){
+  const today=broadcastToday();scrollToNowRequested=true
+  if(dateInput.value===today&&schedule?.date===today)render()
+  else{dateInput.value=today;load()}
+}
 
 async function load(){
   loading.hidden=false; guide.hidden=true; status.textContent='取得中…'
@@ -144,7 +150,8 @@ function render(){
       box.innerHTML=`<div class="program-meta"><time>${pad(new Date(p.startAt).getHours())}:${pad(new Date(p.startAt).getMinutes())}–${pad(new Date(p.endAt).getHours())}:${pad(new Date(p.endAt).getMinutes())}</time>${badge}</div><strong>${escapeHtml(p.title)}</strong>`;col.append(box)} guide.append(col)
   }
   if(!channels.length)guide.innerHTML+='<div class="message">該当する番組がありません</div>'
-  const now=Date.now();if(now>=start&&now<end){const minute=Math.min(totalMinutes,Math.max(0,Math.floor((now-start)/60000)));const line=document.createElement('div');line.className='now';line.style.top=`${48+cumulativePixels[minute]}px`;guide.append(line)}
+  const now=Date.now();if(now>=start&&now<end){const minute=Math.min(totalMinutes,Math.max(0,Math.floor((now-start)/60000))),top=48+cumulativePixels[minute];const line=document.createElement('div');line.className='now';line.style.top=`${top}px`;guide.append(line);if(scrollToNowRequested){requestAnimationFrame(()=>{$('viewport').scrollTop=Math.max(0,top-$('viewport').clientHeight*.3)});scrollToNowRequested=false}}
+  else scrollToNowRequested=false
 }
 function escapeHtml(s){const e=document.createElement('span');e.textContent=s;return e.innerHTML}
-dateInput.value=broadcastToday();$('prev').onclick=()=>shift(-1);$('next').onclick=()=>shift(1);$('today').onclick=()=>{dateInput.value=broadcastToday();load()};$('reload').onclick=load;dateInput.onchange=load;$('band').onchange=render;$('genre-filter-clear').onclick=()=>{selectedGenres.clear();saveGenreSelection();buildGenres();render()};document.querySelectorAll('[data-channel-selection]').forEach(button=>button.onclick=()=>selectChannelGroup(button.dataset.channelSelection));load()
+dateInput.value=broadcastToday();$('prev').onclick=()=>shift(-1);$('next').onclick=()=>shift(1);$('today').onclick=showCurrentTime;$('now').onclick=showCurrentTime;$('reload').onclick=load;dateInput.onchange=load;$('band').onchange=render;$('genre-filter-clear').onclick=()=>{selectedGenres.clear();saveGenreSelection();buildGenres();render()};document.querySelectorAll('[data-channel-selection]').forEach(button=>button.onclick=()=>selectChannelGroup(button.dataset.channelSelection));load()

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.8
+
+- Add a Current button that returns to today and scrolls to the current-time line.
+- Scroll to the current time automatically when opening today's schedule.
+
 ## 0.1.7
 
 - Dim programs outside the selected genres instead of hiding them.
