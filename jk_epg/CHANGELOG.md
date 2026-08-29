@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.6
+
+- Persist multi-select genre filters in browser local storage.
+- Remove saved genres automatically when they are no longer available.
+
 ## 0.1.5
 
 - Add a checkbox panel for choosing which channels appear in the schedule.

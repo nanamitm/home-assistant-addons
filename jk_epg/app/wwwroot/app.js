@@ -1,7 +1,10 @@
 const $ = id => document.getElementById(id)
 const dateInput=$('date'), guide=$('guide'), loading=$('loading'), status=$('status')
 let schedule=null
-const selectedGenres=new Set()
+const genreStorageKey='jk-epg-selected-genres'
+let savedGenres=[]
+try{const value=localStorage.getItem(genreStorageKey);if(value!==null){const parsed=JSON.parse(value);if(Array.isArray(parsed))savedGenres=parsed}}catch{}
+const selectedGenres=new Set(savedGenres)
 const channelStorageKey='jk-epg-selected-channels'
 let savedChannels=null
 try{const value=localStorage.getItem(channelStorageKey);if(value!==null){const parsed=JSON.parse(value);if(Array.isArray(parsed))savedChannels=parsed}}catch{}
@@ -72,17 +75,20 @@ function selectChannelGroup(group){
 function buildGenres(){
   const genres=new Map()
   schedule.channels.forEach(c=>c.programs.forEach(p=>{const value=p.genreCode||'__unknown__',meta=genreMeta[genreKey(p.genreCode)];genres.set(value,p.genreName||meta.name)}))
-  for(const value of [...selectedGenres])if(!genres.has(value))selectedGenres.delete(value)
+  let changed=false;for(const value of [...selectedGenres])if(!genres.has(value)){selectedGenres.delete(value);changed=true}if(changed)saveGenreSelection()
   const options=$('genre-filter-options');options.innerHTML=''
   for(const [value,name] of [...genres].sort((a,b)=>genreKey(a[0]).localeCompare(genreKey(b[0])))){
     const meta=genreMeta[genreKey(value)],label=document.createElement('label');label.className=`genre-filter-option ${meta.className}`
     const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.value=value;checkbox.checked=selectedGenres.has(value)
-    checkbox.addEventListener('change',()=>{checkbox.checked?selectedGenres.add(value):selectedGenres.delete(value);updateGenreFilterSummary(genres);render()})
+    checkbox.addEventListener('change',()=>{checkbox.checked?selectedGenres.add(value):selectedGenres.delete(value);saveGenreSelection();updateGenreFilterSummary(genres);render()})
     label.innerHTML='<i></i>';label.append(checkbox,document.createTextNode(name));options.append(label)
   }
   updateGenreFilterSummary(genres)
   const keys=new Set([...genres.keys()].map(genreKey))
   $('legend-items').innerHTML=[...keys].sort().map(key=>`<span class="legend-item ${genreMeta[key].className}"><i></i>${escapeHtml(genreMeta[key].name)}</span>`).join('')
+}
+function saveGenreSelection(){
+  try{localStorage.setItem(genreStorageKey,JSON.stringify([...selectedGenres]))}catch{}
 }
 function updateGenreFilterSummary(genres){
   const names=[...selectedGenres].map(value=>genres.get(value)).filter(Boolean)
@@ -141,4 +147,4 @@ function render(){
   const now=Date.now();if(now>=start&&now<end){const minute=Math.min(totalMinutes,Math.max(0,Math.floor((now-start)/60000)));const line=document.createElement('div');line.className='now';line.style.top=`${48+cumulativePixels[minute]}px`;guide.append(line)}
 }
 function escapeHtml(s){const e=document.createElement('span');e.textContent=s;return e.innerHTML}
-dateInput.value=broadcastToday();$('prev').onclick=()=>shift(-1);$('next').onclick=()=>shift(1);$('today').onclick=()=>{dateInput.value=broadcastToday();load()};$('reload').onclick=load;dateInput.onchange=load;$('band').onchange=render;$('genre-filter-clear').onclick=()=>{selectedGenres.clear();buildGenres();render()};document.querySelectorAll('[data-channel-selection]').forEach(button=>button.onclick=()=>selectChannelGroup(button.dataset.channelSelection));load()
+dateInput.value=broadcastToday();$('prev').onclick=()=>shift(-1);$('next').onclick=()=>shift(1);$('today').onclick=()=>{dateInput.value=broadcastToday();load()};$('reload').onclick=load;dateInput.onchange=load;$('band').onchange=render;$('genre-filter-clear').onclick=()=>{selectedGenres.clear();saveGenreSelection();buildGenres();render()};document.querySelectorAll('[data-channel-selection]').forEach(button=>button.onclick=()=>selectChannelGroup(button.dataset.channelSelection));load()
