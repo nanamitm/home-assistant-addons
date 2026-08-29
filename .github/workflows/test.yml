@@ -31,7 +31,7 @@ jobs:
 
           import yaml
 
-          ADDONS = ("gps_ntp", "sdrconnect", "xgps")
+          ADDONS = ("gps_ntp", "sdrconnect", "tvtest_epg_sync", "xgps")
 
 
           def dockerfile(addon):
@@ -53,7 +53,7 @@ jobs:
               assert latest == f"## {config['version']}", (addon, latest)
 
           # The Supervisor builds these locally and reads their base from build.yaml.
-          for addon in ("gps_ntp", "sdrconnect"):
+          for addon in ("gps_ntp", "sdrconnect", "tvtest_epg_sync"):
               config = yaml.safe_load(open(f"{addon}/config.yaml"))
               build = yaml.safe_load(open(f"{addon}/build.yaml"))
               assert "image" not in config, addon
@@ -90,6 +90,17 @@ jobs:
           assert len(automations) == 4
           assert all(item["trigger"] and item["action"] for item in automations)
 
+          config = yaml.safe_load(open("tvtest_epg_sync/config.yaml"))
+          assert config["slug"] == "tvtest_epg_sync"
+          assert config["ingress"] is True
+          assert set(config["arch"]) == {"amd64", "aarch64"}
+          # TVTest connects to this port directly; Ingress only serves the status page.
+          assert config["ports"] == {"8077/tcp": 8077}
+          assert set(config["ports_description"]) == set(config["ports"])
+          assert config["watchdog"] == "http://[HOST]:[PORT:8077]/api/health"
+          # The token guards the API, so it must not be readable in the interface.
+          assert config["schema"]["token"] == "password?"
+
           config = yaml.safe_load(open("jk_epg/config.yaml"))
           assert config["slug"] == "jk_epg"
           assert config["ingress"] is True
@@ -119,5 +130,6 @@ jobs:
         run: |
           bash -n gps_ntp/run.sh
           bash -n sdrconnect/run.sh
+          bash -n tvtest_epg_sync/run.sh
           bash -n xgps/run.sh
           sh -n jk_epg/run.sh
