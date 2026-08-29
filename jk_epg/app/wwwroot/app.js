@@ -37,9 +37,8 @@ const genreMeta={
   unknown:{name:'ジャンル不明',className:'genre-unknown'},
 }
 const api = path => new URL(path, document.baseURI)
-const pad=n=>String(n).padStart(2,'0')
-const localDate=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`
-const genreKey=code=>{const key=String(code||'').toLowerCase().replace('0x','');return genreMeta[key]?key:'unknown'}
+const {pad,localDate,variableTimeline}=window.JkEpgUi
+const genreKey=code=>window.JkEpgUi.genreKey(code,genreMeta)
 function broadcastToday(){const d=new Date();if(d.getHours()<5)d.setDate(d.getDate()-1);return localDate(d)}
 function shift(days){const [y,m,d]=dateInput.value.split('-').map(Number), value=new Date(y,m-1,d);value.setDate(value.getDate()+days);dateInput.value=localDate(value);load()}
 function showCurrentTime(){
@@ -165,32 +164,14 @@ function render(){
   const channels=orderedChannels()
     .filter(c=>selectedChannels.has(c.video)&&(!favoriteOnly||favoriteChannels.has(c.video))&&(band==='all'||(band==='bs')===c.bs))
     .filter(c=>c.programs.length>0)
-  const matchesProgram=p=>(selectedGenres.size===0||selectedGenres.has(p.genreCode||'__unknown__'))&&(!searchQuery||p.title.toLocaleLowerCase('ja').includes(searchQuery))
+  const matchesProgram=p=>window.JkEpgUi.matchesProgram(p,selectedGenres,searchQuery)
   $('search-count').textContent=searchQuery?`一致 ${channels.reduce((count,c)=>count+c.programs.filter(matchesProgram).length,0)}件`:''
   if(viewMode==='now-next'){renderNowNext(channels,matchesProgram);return}
   guide.hidden=false;$('now-next').hidden=true
   guide.style.setProperty('--count',Math.max(1,channels.length)); guide.innerHTML='<div class="corner">時刻</div>'+channels.map(c=>`<div class="channel">${escapeHtml(c.name)}</div>`).join('')
   const start=new Date(schedule.startAt).getTime(), end=new Date(schedule.endAt).getTime()
-  const totalMinutes=Math.max(1,Math.round((end-start)/60000))
-  const oneMinutePx=2, minimumProgramPx=36
-
-  // jkcnsl-cacheと同じEDCB方式の可変ピクセル密度。短い番組が最低36pxに
-  // なるよう該当時間帯のpx/分を増やし、その増分を以降の時刻へ積み上げる。
-  const pixelsPerMinute=new Array(totalMinutes).fill(oneMinutePx)
-  for(const channel of channels){
-    for(const program of channel.programs){
-      const programStart=Math.max(start,new Date(program.startAt).getTime())
-      const programEnd=Math.min(end,new Date(program.endAt).getTime())
-      const durationMinutes=Math.ceil((programEnd-programStart)/60000)
-      if(durationMinutes<=0||durationMinutes*oneMinutePx>=minimumProgramPx)continue
-      const needed=Math.ceil(minimumProgramPx/durationMinutes)
-      const first=Math.max(0,Math.floor((programStart-start)/60000))
-      const last=Math.min(totalMinutes-1,first+durationMinutes-1)
-      for(let minute=first;minute<=last;minute++)pixelsPerMinute[minute]=Math.max(pixelsPerMinute[minute],needed)
-    }
-  }
-  const cumulativePixels=new Array(totalMinutes+1).fill(0)
-  for(let minute=0;minute<totalMinutes;minute++)cumulativePixels[minute+1]=cumulativePixels[minute]+pixelsPerMinute[minute]
+  // jkcnsl-cacheと同じEDCB方式の可変ピクセル密度。
+  const {totalMinutes,cumulativePixels}=variableTimeline(channels,start,end)
   const bodyHeight=cumulativePixels[totalMinutes]
   guide.style.setProperty('--body-height',`${bodyHeight}px`)
 

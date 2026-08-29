@@ -14,6 +14,15 @@ jobs:
           python-version: "3.12"
       - run: pip install pytest aiohttp pyyaml paho-mqtt
       - run: pytest -q
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Test JK EPG acquisition sources
+        run: dotnet test jk_epg/tests/JkEpg.Tests.csproj --configuration Release
+      - name: Test JK EPG web UI logic
+        run: node --test jk_epg/tests/ui-core.test.js
+      - run: node --check jk_epg/app/wwwroot/app.js
+      - run: node --check jk_epg/app/wwwroot/ui-core.js
       - run: node --check xgps/app/static/app.js
       - name: Validate add-on configuration
         run: |
@@ -81,6 +90,12 @@ jobs:
           assert len(automations) == 4
           assert all(item["trigger"] and item["action"] for item in automations)
 
+          config = yaml.safe_load(open("jk_epg/config.yaml"))
+          assert config["slug"] == "jk_epg"
+          assert config["ingress"] is True
+          assert set(config["arch"]) == {"amd64", "aarch64"}
+          assert config["stage"] in {"experimental", "stable"}
+
           config = yaml.safe_load(open("sdrconnect/config.yaml"))
           build = yaml.safe_load(open("sdrconnect/build.yaml"))
           assert config["slug"] == "sdrconnect"
@@ -100,3 +115,4 @@ jobs:
           bash -n gps_ntp/run.sh
           bash -n sdrconnect/run.sh
           bash -n xgps/run.sh
+          sh -n jk_epg/run.sh
