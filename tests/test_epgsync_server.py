@@ -6,22 +6,30 @@ TVTest 側の LibISDB が生成した実データがあれば、環境変数 EPG
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
+import pathlib
 import shutil
 import struct
-import sys
 import tempfile
 import threading
 import unittest
 import urllib.error
 import urllib.request
 
-sys.path.insert(
-    0, os.path.join(os.path.dirname(__file__), "..", "tvtest_epg_sync", "app")
+# 他のアドオンにも app/server.py があるため、"server" という名前で取り込むと
+# 先に読み込まれたほうが sys.modules に残り、取り違えが起きる。
+# パスを指定して、このアドオン専用の名前で読み込む。
+_APP = (
+    pathlib.Path(__file__).resolve().parent.parent
+    / "tvtest_epg_sync"
+    / "app"
+    / "server.py"
 )
-
-import server  # noqa: E402
+_SPEC = importlib.util.spec_from_file_location("tvtest_epg_sync_server", _APP)
+server = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(server)
 
 
 def make_blob(nid=4, tsid=0x4010, sid=0xE4, version=1000, event_count=2, body=b"\x01\x00\x00\x00\x00"):
