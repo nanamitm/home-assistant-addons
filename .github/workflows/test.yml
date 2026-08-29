@@ -94,7 +94,12 @@ jobs:
           assert config["slug"] == "jk_epg"
           assert config["ingress"] is True
           assert set(config["arch"]) == {"amd64", "aarch64"}
-          assert config["stage"] in {"experimental", "stable"}
+          assert config["stage"] == "stable"
+          manifest = __import__("json").load(open("jk_epg/custom_components/jk_epg/manifest.json"))
+          assert manifest["version"] == config["version"]
+          latest = next(line for line in pathlib.Path("jk_epg/CHANGELOG.md").read_text().splitlines() if line.startswith("## "))
+          assert latest == f"## {config['version']}"
+          assert pathlib.Path("jk_epg/logo.png").read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
 
           config = yaml.safe_load(open("sdrconnect/config.yaml"))
           build = yaml.safe_load(open("sdrconnect/build.yaml"))

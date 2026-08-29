@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.0
+
+- Promote JK EPG to a stable add-on release.
+- Split external EPG sources into dedicated classes.
+- Add automated acquisition, cache recovery and web UI tests.
+- Build the add-on for amd64 and aarch64 in GitHub Actions.
+- Expose per-source attempts, response times, item counts and consecutive failures.
+- Quarantine corrupt SQLite caches and recreate a healthy cache automatically.
+- Add a dedicated JK EPG logo.
+
 ## 0.1.14
 
 - Bundle an optional JK EPG custom integration and install it on add-on startup.
