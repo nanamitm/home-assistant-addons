@@ -43,6 +43,11 @@ usable; known Japanese BS/CS network IDs are classified automatically, while
 the guide shows `NID/TSID/SID` in place of the channel name until metadata
 arrives.
 
+Advanced BS (`NID 0x000B`) is grouped under BS. SKY PerfecTV! Premium
+(`NID 0x000A`) is grouped under **Other**, separately from the 110-degree CS
+networks (`NID 0x0006` and `0x0007`). Metadata saved by older clients is
+corrected when it is loaded.
+
 ## Options
 
 | Option | Default | Description |

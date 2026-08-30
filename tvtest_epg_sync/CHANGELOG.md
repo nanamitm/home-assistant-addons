@@ -1,3 +1,11 @@
+## 1.1.3
+
+- Classify Advanced BS network ID `0x000B` as BS so 4K/8K services no longer
+  appear under terrestrial services.
+- Classify SKY PerfecTV! Premium network ID `0x000A` as other, while keeping
+  network IDs `0x0006` and `0x0007` under CS.
+- Correct persisted metadata written by older clients when it is loaded.
+
 ## 1.1.2
 
 - Add instant program-guide filtering for terrestrial, BS, CS and other

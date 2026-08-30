@@ -396,10 +396,19 @@ NETWORK_TYPES = frozenset(("terrestrial", "bs", "cs", "other"))
 
 def normalize_network_type(value: Any, network_id: int) -> str:
     network_type = str(value or "").strip().lower()
+
+    # 1.1.2 以前のクライアントは、未登録だった高度BSの NID 0x000B を
+    # 地デジ、スカパー!プレミアムの NID 0x000A を通常のCSとして送っていた。
+    # 保存済みのメタデータも読み込み時に正しい分類へ移行する。
+    if network_id == 0x000B and network_type in ("", "terrestrial"):
+        return "bs"
+    if network_id == 0x000A and network_type in ("", "cs"):
+        return "other"
+
     if not network_type:
         if network_id == 4:
             return "bs"
-        if network_id in (6, 7, 10):
+        if network_id in (6, 7):
             return "cs"
         return "terrestrial"
     if network_type not in NETWORK_TYPES:

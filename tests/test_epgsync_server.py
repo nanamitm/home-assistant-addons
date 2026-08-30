@@ -619,6 +619,39 @@ class ServerTestCase(ServerFixture):
         self.assertEqual(item.name, "保存局")
         self.assertEqual(item.network_type, "bs")
 
+    def test_known_satellite_networks_are_classified_and_migrated(self):
+        self.assertEqual(server.normalize_network_type(None, 0x000B), "bs")
+        self.assertEqual(server.normalize_network_type("terrestrial", 0x000B), "bs")
+        self.assertEqual(server.normalize_network_type(None, 0x000A), "other")
+        self.assertEqual(server.normalize_network_type("cs", 0x000A), "other")
+        self.assertEqual(server.normalize_network_type(None, 0x0006), "cs")
+
+        metadata = {
+            "saved_at": "2026-08-30T00:00:00Z",
+            "services": [
+                {
+                    "nid": 0x000B, "tsid": 1, "sid": 101,
+                    "name": "BS 4K", "network_type": "terrestrial",
+                },
+                {
+                    "nid": 0x000A, "tsid": 2, "sid": 102,
+                    "name": "プレミアム", "network_type": "cs",
+                },
+            ],
+        }
+        with open(os.path.join(self.data_dir, "metadata.json"), "w", encoding="utf-8") as file:
+            json.dump(metadata, file)
+
+        reopened = server.MetadataStore(self.data_dir)
+        self.assertEqual(
+            reopened.get(server.ServiceKey(0x000B, 1, 101)).network_type,
+            "bs",
+        )
+        self.assertEqual(
+            reopened.get(server.ServiceKey(0x000A, 2, 102)).network_type,
+            "other",
+        )
+
     def test_ui_subscriber_is_not_counted(self):
         ready = threading.Event()
         stop = threading.Event()
