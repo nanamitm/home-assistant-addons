@@ -74,6 +74,29 @@
     return false;
   }
 
+  var NETWORK_FILTERS = ["all", "terrestrial", "bs", "cs", "other"];
+  var SERVICE_FILTERS = ["main", "all"];
+  var DEFAULT_FILTERS = { network: "all", service: "main", genres: [] };
+
+  function sanitizeFilters(stored) {
+    // 保存された値は古い版のものかもしれないし、人が書き換えているかもしれない。
+    // 知っている値だけを拾い、残りは既定に戻す。
+    var result = {
+      network: DEFAULT_FILTERS.network,
+      service: DEFAULT_FILTERS.service,
+      genres: []
+    };
+    if (!stored || typeof stored !== "object") return result;
+    if (NETWORK_FILTERS.indexOf(stored.network) >= 0) result.network = stored.network;
+    if (SERVICE_FILTERS.indexOf(stored.service) >= 0) result.service = stored.service;
+    if (Array.isArray(stored.genres)) {
+      GENRES.forEach(function (genre) {
+        if (stored.genres.indexOf(genre.value) >= 0) result.genres.push(genre.value);
+      });
+    }
+    return result;
+  }
+
   // ARIB のサービス形式。デジタルTVとデジタル音声だけを主要サービスとみなす。
   var MAIN_SERVICE_TYPES = [0x01, 0x02];
 
@@ -102,6 +125,7 @@
     filterServices: filterServices,
     GENRES: GENRES,
     OTHER_GENRE: OTHER_GENRE,
-    matchesGenres: matchesGenres
+    matchesGenres: matchesGenres,
+    sanitizeFilters: sanitizeFilters
   };
 }));

@@ -44,6 +44,39 @@
     return element;
   }
 
+  // 絞り込みはブラウザごとに覚えておく。番組表の中身ではないので、サーバには置かない。
+  var FILTER_STORAGE_KEY = "epgsync.guide-filters";
+
+  function loadFilters() {
+    var stored = null;
+    try {
+      stored = JSON.parse(window.localStorage.getItem(FILTER_STORAGE_KEY));
+    } catch (error) {
+      // プライベートウィンドウなど、読めない環境では既定のまま始める。
+    }
+    return window.EpgSyncGuideLayout.sanitizeFilters(stored);
+  }
+
+  function saveFilters() {
+    try {
+      window.localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify({
+        network: networkFilter.value,
+        service: serviceFilter.value,
+        genres: selectedGenres
+      }));
+    } catch (error) {
+      // 保存できなくても表示には影響しない。
+    }
+  }
+
+  function applyStoredFilters() {
+    var filters = loadFilters();
+    networkFilter.value = filters.network;
+    serviceFilter.value = filters.service;
+    selectedGenres = filters.genres;
+    syncGenreChips();
+  }
+
   function buildGenreChips() {
     window.EpgSyncGuideLayout.GENRES.forEach(function (genre) {
       var chip = node("button", "genre-chip genre-" + genre.value, genre.label);
@@ -53,6 +86,7 @@
         var at = selectedGenres.indexOf(genre.value);
         if (at < 0) selectedGenres.push(genre.value); else selectedGenres.splice(at, 1);
         syncGenreChips();
+        saveFilters();
         if (lastGuide) renderGuide(lastGuide);
       });
       genreChips.appendChild(chip);
@@ -350,6 +384,7 @@
   [networkFilter, serviceFilter].forEach(function (filter) {
     filter.addEventListener("change", function () {
       viewport.scrollLeft = 0;
+      saveFilters();
       if (lastGuide) renderGuide(lastGuide);
     });
   });
@@ -363,8 +398,10 @@
     if (!selectedGenres.length) return;
     selectedGenres = [];
     syncGenreChips();
+    saveFilters();
     if (lastGuide) renderGuide(lastGuide);
   });
+  applyStoredFilters();
   dateInput.value = localDate(new Date());
   columnWidth = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--column-width")) || 190;
   loadGuide(false);

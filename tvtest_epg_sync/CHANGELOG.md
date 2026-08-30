@@ -1,3 +1,8 @@
+## 1.3.1
+
+- Remember the broadcast network, service and genre filters, so the guide opens
+  the way it was left. The choice is kept in the browser, per device.
+
 ## 1.3.0
 
 - Add a genre filter to the program guide. Pick any number of genres and the

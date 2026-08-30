@@ -1,7 +1,8 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const {
-  variableTimeline, pixelAt, filterServices, matchesGenres, GENRES, OTHER_GENRE,
+  variableTimeline, pixelAt, filterServices, matchesGenres, sanitizeFilters,
+  GENRES, OTHER_GENRE,
 } = require('../app/static/guide-layout.js')
 
 const start = Date.parse('2026-08-30T04:00:00+09:00')
@@ -113,4 +114,28 @@ test('offers one chip per genre up to the other bucket', () => {
   assert.equal(GENRES.length, OTHER_GENRE + 1)
   assert.deepEqual(GENRES.map(item => item.value), [...Array(OTHER_GENRE + 1).keys()])
   assert.ok(GENRES.every(item => item.label))
+})
+
+test('restores filters that were stored', () => {
+  assert.deepEqual(
+    sanitizeFilters({ network: 'bs', service: 'all', genres: [7, 3] }),
+    { network: 'bs', service: 'all', genres: [3, 7] }
+  )
+})
+
+test('falls back to the defaults when nothing was stored', () => {
+  const defaults = { network: 'all', service: 'main', genres: [] }
+  assert.deepEqual(sanitizeFilters(null), defaults)
+  assert.deepEqual(sanitizeFilters(undefined), defaults)
+  assert.deepEqual(sanitizeFilters('bs'), defaults)
+  assert.deepEqual(sanitizeFilters({}), defaults)
+})
+
+test('drops stored values it does not recognise', () => {
+  // 古い版が書いた値や、書き換えられた値をそのまま画面に入れない。
+  assert.deepEqual(
+    sanitizeFilters({ network: 'cable', service: 'everything', genres: [3, 99, 'ドラマ'] }),
+    { network: 'all', service: 'main', genres: [3] }
+  )
+  assert.deepEqual(sanitizeFilters({ genres: 'ドラマ' }).genres, [])
 })
