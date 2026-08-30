@@ -118,13 +118,13 @@ test('offers one chip per genre up to the other bucket', () => {
 
 test('restores filters that were stored', () => {
   assert.deepEqual(
-    sanitizeFilters({ network: 'bs', service: 'all', genres: [7, 3] }),
-    { network: 'bs', service: 'all', genres: [3, 7] }
+    sanitizeFilters({ network: 'bs', service: 'all', zoom: '3', genres: [7, 3] }),
+    { network: 'bs', service: 'all', zoom: '3', genres: [3, 7] }
   )
 })
 
 test('falls back to the defaults when nothing was stored', () => {
-  const defaults = { network: 'all', service: 'main', genres: [] }
+  const defaults = { network: 'all', service: 'main', zoom: '2', genres: [] }
   assert.deepEqual(sanitizeFilters(null), defaults)
   assert.deepEqual(sanitizeFilters(undefined), defaults)
   assert.deepEqual(sanitizeFilters('bs'), defaults)
@@ -134,8 +134,10 @@ test('falls back to the defaults when nothing was stored', () => {
 test('drops stored values it does not recognise', () => {
   // 古い版が書いた値や、書き換えられた値をそのまま画面に入れない。
   assert.deepEqual(
-    sanitizeFilters({ network: 'cable', service: 'everything', genres: [3, 99, 'ドラマ'] }),
-    { network: 'all', service: 'main', genres: [3] }
+    sanitizeFilters({ network: 'cable', service: 'everything', zoom: 9, genres: [3, 99, 'ドラマ'] }),
+    { network: 'all', service: 'main', zoom: '2', genres: [3] }
   )
   assert.deepEqual(sanitizeFilters({ genres: 'ドラマ' }).genres, [])
+  // select の値は文字列なので、数の 3 は受け付けない。
+  assert.equal(sanitizeFilters({ zoom: 3 }).zoom, '2')
 })

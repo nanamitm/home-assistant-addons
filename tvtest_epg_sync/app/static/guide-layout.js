@@ -76,7 +76,9 @@
 
   var NETWORK_FILTERS = ["all", "terrestrial", "bs", "cs", "other"];
   var SERVICE_FILTERS = ["main", "all"];
-  var DEFAULT_FILTERS = { network: "all", service: "main", genres: [] };
+  // 1分あたりの高さ。select の値と同じく文字列で持つ。
+  var ZOOM_LEVELS = ["1", "2", "3"];
+  var DEFAULT_FILTERS = { network: "all", service: "main", zoom: "2", genres: [] };
 
   function sanitizeFilters(stored) {
     // 保存された値は古い版のものかもしれないし、人が書き換えているかもしれない。
@@ -84,11 +86,13 @@
     var result = {
       network: DEFAULT_FILTERS.network,
       service: DEFAULT_FILTERS.service,
+      zoom: DEFAULT_FILTERS.zoom,
       genres: []
     };
     if (!stored || typeof stored !== "object") return result;
     if (NETWORK_FILTERS.indexOf(stored.network) >= 0) result.network = stored.network;
     if (SERVICE_FILTERS.indexOf(stored.service) >= 0) result.service = stored.service;
+    if (ZOOM_LEVELS.indexOf(stored.zoom) >= 0) result.zoom = stored.zoom;
     if (Array.isArray(stored.genres)) {
       GENRES.forEach(function (genre) {
         if (stored.genres.indexOf(genre.value) >= 0) result.genres.push(genre.value);

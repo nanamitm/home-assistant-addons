@@ -1,3 +1,8 @@
+## 1.3.2
+
+- Remember the guide height along with the other display settings.
+- Mark the add-on stable.
+
 ## 1.3.1
 
 - Remember the broadcast network, service and genre filters, so the guide opens

@@ -5,6 +5,7 @@
   var dateInput = document.getElementById("guide-date");
   var networkFilter = document.getElementById("network-filter");
   var serviceFilter = document.getElementById("service-filter");
+  var zoom = document.getElementById("zoom");
   var genreChips = document.getElementById("genre-chips");
   var genreAll = document.getElementById("genre-all");
   var selectedGenres = [];
@@ -44,8 +45,13 @@
     return element;
   }
 
-  // 絞り込みはブラウザごとに覚えておく。番組表の中身ではないので、サーバには置かない。
+  // 表示の設定はブラウザごとに覚えておく。番組表の中身ではないので、サーバには置かない。
   var FILTER_STORAGE_KEY = "epgsync.guide-filters";
+
+  function setMinuteHeight(value) {
+    minuteHeight = Number(value);
+    document.documentElement.style.setProperty("--minute-height", minuteHeight + "px");
+  }
 
   function loadFilters() {
     var stored = null;
@@ -62,6 +68,7 @@
       window.localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify({
         network: networkFilter.value,
         service: serviceFilter.value,
+        zoom: zoom.value,
         genres: selectedGenres
       }));
     } catch (error) {
@@ -73,6 +80,8 @@
     var filters = loadFilters();
     networkFilter.value = filters.network;
     serviceFilter.value = filters.service;
+    zoom.value = filters.zoom;
+    setMinuteHeight(filters.zoom);
     selectedGenres = filters.genres;
     syncGenreChips();
   }
@@ -376,9 +385,9 @@
   document.getElementById("today").addEventListener("click", function () { dateInput.value = localDate(new Date()); loadGuide(false); });
   document.getElementById("now").addEventListener("click", scrollToNow);
   dateInput.addEventListener("change", function () { loadGuide(false); });
-  document.getElementById("zoom").addEventListener("change", function (event) {
-    minuteHeight = Number(event.target.value);
-    document.documentElement.style.setProperty("--minute-height", minuteHeight + "px");
+  zoom.addEventListener("change", function (event) {
+    setMinuteHeight(event.target.value);
+    saveFilters();
     if (lastGuide) renderGuide(lastGuide);
   });
   [networkFilter, serviceFilter].forEach(function (filter) {

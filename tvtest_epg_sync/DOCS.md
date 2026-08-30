@@ -58,10 +58,11 @@ into the background, which keeps the surrounding schedule readable while the
 matches stand out; hovering one brings it back to full strength. Reserved
 genres and programs with no genre at all are gathered under **Other**.
 
-The broadcast network, service and genre filters are remembered, so the guide
-opens the way it was left. They are kept in the browser rather than on the
-server, so each device keeps its own choice, and a browser that refuses to store
-anything simply opens with the defaults.
+The broadcast network, service and genre filters are remembered along with the
+height, so the guide opens the way it was left. They are kept in the browser
+rather than on the server, so each device keeps its own choice, and a browser
+that refuses to store anything simply opens with the defaults. The day shown is
+not remembered; the guide always opens on today.
 
 ## Channel logos
 
