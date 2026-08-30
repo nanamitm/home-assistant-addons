@@ -140,8 +140,19 @@
     var eventTotal = 0;
     services.forEach(function (service, index) {
       var header = node("div", "channel-header");
-      header.appendChild(node("div", "channel-name", service.name || serviceId(service)));
-      header.appendChild(node("div", "channel-id", serviceId(service)));
+      if (service.logo) {
+        var logo = node("img", "channel-logo");
+        logo.src = api(service.logo);
+        // 局名がすぐ隣にあるので、読み上げでは飾りとして扱う。
+        logo.alt = "";
+        logo.loading = "lazy";
+        logo.addEventListener("error", function () { logo.remove(); });
+        header.appendChild(logo);
+      }
+      var text = node("div", "channel-text");
+      text.appendChild(node("div", "channel-name", service.name || serviceId(service)));
+      text.appendChild(node("div", "channel-id", serviceId(service)));
+      header.appendChild(text);
       headers.appendChild(header);
 
       var column = node("div", "service-column");

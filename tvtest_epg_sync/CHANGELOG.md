@@ -1,3 +1,11 @@
+## 1.2.0
+
+- Show the channel logo in front of each station name in the program guide.
+- Accept logos uploaded by an updated TVTest and hand them to the browser as
+  ordinary PNGs. ARIB carries them as indexed PNGs with no palette, so the
+  add-on inserts the 128 colour palette the standard defines.
+- Prefer logo type 5 (64x36), the only type advanced BS broadcasts.
+
 ## 1.1.5
 
 - Decide which sub channels are simulcasts from the EIT event sharing

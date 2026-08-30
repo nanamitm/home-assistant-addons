@@ -36,6 +36,7 @@ APP_DIR = os.path.dirname(os.path.abspath(__file__))
 if APP_DIR not in sys.path:
     sys.path.insert(0, APP_DIR)
 
+import arib_png
 import epg_parser
 
 LOG = logging.getLogger("epgsync")
@@ -417,9 +418,12 @@ def normalize_network_type(value: Any, network_id: int) -> str:
 
 
 class ServiceMetadata:
+    # ロゴを持たないサービスの logo_id
+    NO_LOGO = -1
+
     __slots__ = (
         "key", "name", "group", "network_type", "remote_control_key", "service_type",
-        "order", "source", "updated_at",
+        "order", "source", "updated_at", "logo_id", "logo_type", "logo_version",
     )
 
     def __init__(
@@ -433,6 +437,9 @@ class ServiceMetadata:
         order: int,
         source: str,
         updated_at: str,
+        logo_id: int = NO_LOGO,
+        logo_type: int = 0,
+        logo_version: int = 0,
     ) -> None:
         self.key = key
         self.name = name
@@ -443,6 +450,13 @@ class ServiceMetadata:
         self.order = order
         self.source = source
         self.updated_at = updated_at
+        self.logo_id = logo_id
+        self.logo_type = logo_type
+        self.logo_version = logo_version
+
+    @property
+    def has_logo(self) -> bool:
+        return self.logo_id != self.NO_LOGO
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -457,6 +471,9 @@ class ServiceMetadata:
             "order": self.order,
             "source": self.source,
             "updated_at": self.updated_at,
+            "logo_id": self.logo_id,
+            "logo_type": self.logo_type,
+            "logo_version": self.logo_version,
         }
 
     @classmethod
@@ -471,6 +488,9 @@ class ServiceMetadata:
             int(data.get("order", 0)),
             str(data.get("source", "")),
             str(data.get("updated_at", "")),
+            int(data.get("logo_id", cls.NO_LOGO)),
+            int(data.get("logo_type", 0)),
+            int(data.get("logo_version", 0)),
         )
 
 
@@ -527,6 +547,12 @@ class MetadataStore:
             raise ValueError("サービスタイプの範囲が不正です")
         if not 0 <= item.order <= 1_000_000:
             raise ValueError("表示順の範囲が不正です")
+        if item.has_logo and not 0 <= item.logo_id <= 0xFFFF:
+            raise ValueError("ロゴ ID の範囲が不正です")
+        if not 0 <= item.logo_type <= 0xFF:
+            raise ValueError("ロゴ種別の範囲が不正です")
+        if not 0 <= item.logo_version <= 0xFFFF:
+            raise ValueError("ロゴのバージョンの範囲が不正です")
 
     def update(self, raw_services: Any, source: str) -> int:
         if not isinstance(raw_services, list):
@@ -550,6 +576,9 @@ class MetadataStore:
                     int(raw.get("order", len(validated))),
                     source,
                     now,
+                    int(raw.get("logo_id", ServiceMetadata.NO_LOGO)),
+                    int(raw.get("logo_type", 0)),
+                    int(raw.get("logo_version", 0)),
                 )
             except (KeyError, TypeError, ValueError, BlobError) as exc:
                 raise ValueError("サービスの項目が不正です") from exc
@@ -573,12 +602,174 @@ class MetadataStore:
                 self._save()
 
 
+class LogoKey(tuple):
+    """ロゴは (ネットワーク, ロゴ ID, 種別) で決まる。
+
+    ひとつのロゴを同じ系列の複数サービスが共有するので、サービスとは別に持つ。
+    """
+
+    __slots__ = ()
+
+    def __new__(cls, nid: int, logo_id: int, logo_type: int) -> "LogoKey":
+        for value, limit, label in (
+            (nid, 0xFFFF, "ネットワーク ID"),
+            (logo_id, 0xFFFF, "ロゴ ID"),
+            (logo_type, 0xFF, "ロゴ種別"),
+        ):
+            if not isinstance(value, int) or not 0 <= value <= limit:
+                raise BlobError(f"{label} の範囲が不正です")
+        return super().__new__(cls, (nid, logo_id, logo_type))
+
+    @property
+    def nid(self) -> int:
+        return self[0]
+
+    @property
+    def logo_id(self) -> int:
+        return self[1]
+
+    @property
+    def logo_type(self) -> int:
+        return self[2]
+
+    @property
+    def filename(self) -> str:
+        return f"{self[0]:04X}_{self[1]:03X}_{self[2]:02X}.png"
+
+    def __str__(self) -> str:
+        return f"{self[0]:04X}/{self[1]:03X}/{self[2]:02X}"
+
+
+class LogoStore:
+    """TVTest から受け取った局ロゴを保管する。
+
+    受け取った ARIB 形式の PNG をそのまま保存し、ブラウザ向けに直したものは
+    メモリに載せておく。ロゴは数十個・数十 KB しかないので、すべて常駐させて
+    構わない。
+    """
+
+    MAX_LOGO_SIZE = 64 * 1024
+
+    def __init__(self, data_dir: str) -> None:
+        self._dir = os.path.join(data_dir, "logos")
+        self._index_path = os.path.join(data_dir, "logos.json")
+        self._lock = threading.RLock()
+        self._items: dict[LogoKey, dict[str, Any]] = {}
+        self._converted: dict[LogoKey, bytes] = {}
+
+        os.makedirs(self._dir, exist_ok=True)
+        self._load()
+
+    def _path(self, key: LogoKey) -> str:
+        return os.path.join(self._dir, key.filename)
+
+    def _load(self) -> None:
+        try:
+            with open(self._index_path, "r", encoding="utf-8") as file:
+                data = json.load(file)
+        except FileNotFoundError:
+            return
+        except (OSError, ValueError) as exc:
+            LOG.warning("ロゴの索引を読めませんでした: %s", exc)
+            return
+
+        for raw in data.get("logos", []):
+            try:
+                key = LogoKey(int(raw["nid"]), int(raw["logo_id"]), int(raw["logo_type"]))
+            except (KeyError, TypeError, ValueError, BlobError):
+                continue
+            if not os.path.exists(self._path(key)):
+                continue
+            self._items[key] = {
+                "version": int(raw.get("version", 0)),
+                "size": int(raw.get("size", 0)),
+                "updated_at": str(raw.get("updated_at", "")),
+                "source": str(raw.get("source", "")),
+            }
+
+        LOG.info("%d 個の局ロゴを読み込みました。", len(self._items))
+
+    def _save(self) -> None:
+        data = {
+            "saved_at": utcnow(),
+            "logos": [
+                {
+                    "nid": key.nid,
+                    "logo_id": key.logo_id,
+                    "logo_type": key.logo_type,
+                    **item,
+                }
+                for key, item in self._items.items()
+            ],
+        }
+        write_atomic(
+            self._index_path,
+            json.dumps(data, ensure_ascii=False, indent=1).encode("utf-8"),
+        )
+
+    def put(self, key: LogoKey, data: bytes, version: int, source: str) -> None:
+        if not 0 <= version <= 0xFFFF:
+            raise BlobError("ロゴのバージョンが不正です")
+        if len(data) > self.MAX_LOGO_SIZE:
+            raise BlobError("ロゴが大きすぎます")
+        # 受け取った時点で PNG として読めることを確かめておく。壊れたものを
+        # 抱えたまま、表示のたびに失敗するのを避ける。
+        try:
+            converted = arib_png.to_browser_png(data)
+        except arib_png.AribPngError as exc:
+            raise BlobError(f"ロゴを PNG として読めません: {exc}") from exc
+
+        with self._lock:
+            write_atomic(self._path(key), data)
+            self._items[key] = {
+                "version": version,
+                "size": len(data),
+                "updated_at": utcnow(),
+                "source": source,
+            }
+            self._converted[key] = converted
+            self._save()
+
+    def get_png(self, key: LogoKey) -> Optional[tuple[bytes, int]]:
+        """ブラウザ向けの PNG とバージョンを返す。"""
+        with self._lock:
+            item = self._items.get(key)
+            if item is None:
+                return None
+            converted = self._converted.get(key)
+            if converted is not None:
+                return converted, item["version"]
+
+        try:
+            with open(self._path(key), "rb") as file:
+                converted = arib_png.to_browser_png(file.read())
+        except (OSError, arib_png.AribPngError) as exc:
+            LOG.warning("%s のロゴを読めません: %s", key, exc)
+            return None
+
+        with self._lock:
+            self._converted[key] = converted
+            item = self._items.get(key)
+            if item is None:
+                return None
+            return converted, item["version"]
+
+    def list_logos(self) -> list[tuple[LogoKey, dict[str, Any]]]:
+        with self._lock:
+            return sorted(self._items.items())
+
+    def has(self, key: LogoKey) -> bool:
+        with self._lock:
+            return key in self._items
+
+
 class GuideCache:
     """保存 blob を ETag 単位で解析して再利用する。"""
 
-    def __init__(self, store: Store, metadata: MetadataStore) -> None:
+    def __init__(self, store: Store, metadata: MetadataStore, logos: "LogoStore") -> None:
         self._store = store
         self._metadata = metadata
+        self._logos = logos
         self._lock = threading.RLock()
         self._cache: dict[ServiceKey, tuple[str, Optional[epg_parser.EpgService], str]] = {}
 
@@ -727,6 +918,9 @@ class GuideCache:
                         "order": metadata.order,
                     }
                 )
+                logo = self._logo_path(metadata)
+                if logo is not None:
+                    item["logo"] = logo
             if parsed is None:
                 item["parse_error"] = error
             else:
@@ -760,6 +954,22 @@ class GuideCache:
             "generated_at": datetime.now(epg_parser.JST).replace(microsecond=0).isoformat(),
             "services": services,
         }
+
+    def _logo_path(self, metadata: ServiceMetadata) -> Optional[str]:
+        """番組表からロゴを引くための相対パス。持っていなければ None。
+
+        バージョンをクエリに入れておくと、ロゴが差し替わったときだけブラウザが
+        取り直す。Ingress の接頭辞は画面側で足す。
+        """
+        if not metadata.has_logo:
+            return None
+        key = LogoKey(metadata.key.nid, metadata.logo_id, metadata.logo_type)
+        if not self._logos.has(key):
+            return None
+        return (
+            f"/api/logo/{metadata.key.nid}/{metadata.logo_id}/{metadata.logo_type}"
+            f"?v={metadata.logo_version}"
+        )
 
     def _sort_key(self, entry: Entry) -> tuple[Any, ...]:
         metadata = self._metadata.get(entry.key)
@@ -829,12 +1039,14 @@ class Context:
         self.bus = bus
         self.token = token
         self.metadata = MetadataStore(store.data_dir)
-        self.guide = GuideCache(store, self.metadata)
+        self.logos = LogoStore(store.data_dir)
+        self.guide = GuideCache(store, self.metadata, self.logos)
         self.started_at = utcnow()
 
 
 SERVICE_PATH_RE = re.compile(r"^/api/service/(\d+)/(\d+)/(\d+)$")
 GUIDE_EVENT_PATH_RE = re.compile(r"^/api/guide/event/(\d+)/(\d+)/(\d+)/(\d+)$")
+LOGO_PATH_RE = re.compile(r"^/api/logo/(\d+)/(\d+)/(\d+)$")
 STATIC_PATH_RE = re.compile(r"^/static/(guide(?:-layout)?\.js|guide\.css)$")
 
 
@@ -1046,6 +1258,25 @@ class Handler(BaseHTTPRequestHandler):
             if method == "PUT" and path == "/api/service-metadata":
                 self._handle_put_metadata()
                 return
+            if method == "GET" and path == "/api/logos":
+                self._handle_list_logos(query)
+                return
+
+            logo = LOGO_PATH_RE.match(path)
+            if logo:
+                try:
+                    logo_key = LogoKey(
+                        int(logo.group(1)), int(logo.group(2)), int(logo.group(3))
+                    )
+                except BlobError as exc:
+                    self._send_error_json(HTTPStatus.BAD_REQUEST, str(exc))
+                    return
+                if method == "GET":
+                    self._handle_get_logo(logo_key)
+                    return
+                if method == "PUT":
+                    self._handle_put_logo(logo_key)
+                    return
 
             guide_event = GUIDE_EVENT_PATH_RE.match(path)
             if method == "GET" and guide_event:
@@ -1163,6 +1394,77 @@ class Handler(BaseHTTPRequestHandler):
         LOG.info("%s から %d サービスの局情報を受信しました。", self._source_name(), count)
         self.context.bus.publish({"type": "metadata", "count": count})
         self._send_json(HTTPStatus.OK, {"result": "stored", "count": count})
+
+    def _handle_list_logos(self, query: str) -> None:
+        logos = self.context.logos.list_logos()
+
+        if parse_qs(query).get("format", [""])[0] == "text":
+            # TVTest は JSON を読まないので、送信済みの照合には行指向の一覧を使う。
+            lines = "".join(
+                f"{key.nid} {key.logo_id} {key.logo_type} {item['version']}\n"
+                for key, item in logos
+            )
+            self._send(HTTPStatus.OK, lines.encode("utf-8"), "text/plain; charset=utf-8")
+            return
+
+        self._send_json(
+            HTTPStatus.OK,
+            {
+                "logos": [
+                    {
+                        "nid": key.nid,
+                        "logo_id": key.logo_id,
+                        "logo_type": key.logo_type,
+                        **item,
+                    }
+                    for key, item in logos
+                ]
+            },
+        )
+
+    def _handle_get_logo(self, key: LogoKey) -> None:
+        result = self.context.logos.get_png(key)
+        if result is None:
+            self._send_error_json(HTTPStatus.NOT_FOUND, "ロゴがありません")
+            return
+
+        png, version = result
+        etag = f'"{key}-{version}"'
+        if self.headers.get("If-None-Match") == etag:
+            self.send_response(HTTPStatus.NOT_MODIFIED)
+            self.send_header("ETag", etag)
+            self.end_headers()
+            return
+
+        # URL にバージョンが入っているので、長く持たせて構わない。
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "image/png")
+        self.send_header("Content-Length", str(len(png)))
+        self.send_header("Cache-Control", "public, max-age=86400")
+        self.send_header("ETag", etag)
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(png)
+
+    def _handle_put_logo(self, key: LogoKey) -> None:
+        body = self._read_body()
+        if body is None:
+            return
+
+        try:
+            version = int(self.headers.get("X-EPG-Logo-Version", "0"))
+        except ValueError:
+            self._send_error_json(HTTPStatus.BAD_REQUEST, "ロゴのバージョンが不正です")
+            return
+
+        try:
+            self.context.logos.put(key, body, version, self._source_name())
+        except BlobError as exc:
+            self._send_error_json(HTTPStatus.BAD_REQUEST, str(exc))
+            return
+
+        LOG.info("%s から局ロゴ %s を受信しました。", self._source_name(), key)
+        self._send_json(HTTPStatus.OK, {"result": "stored"})
 
     def _handle_get_service(self, key: ServiceKey) -> None:
         result = self.context.store.get_blob(key)

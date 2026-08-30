@@ -17,6 +17,7 @@ import threading
 import unittest
 import urllib.error
 import urllib.request
+import zlib
 
 from tests.test_epgsync_parser import event_blob, service_blob
 
@@ -32,6 +33,23 @@ _APP = (
 _SPEC = importlib.util.spec_from_file_location("tvtest_epg_sync_server", _APP)
 server = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(server)
+
+
+def arib_logo_png(width=8, height=4):
+    """CDT で運ばれるロゴと同じ、PLTE を持たないインデックスカラーの PNG"""
+    def chunk(kind, body):
+        return (
+            struct.pack(">I", len(body)) + kind + body
+            + struct.pack(">I", zlib.crc32(kind + body) & 0xFFFFFFFF)
+        )
+
+    pixels = b"".join(bytes([0]) + bytes([7] * width) for _ in range(height))
+    return (
+        bytes((0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A))
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 3, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(pixels))
+        + chunk(b"IEND", b"")
+    )
 
 
 def make_blob(nid=4, tsid=0x4010, sid=0xE4, version=1000, event_count=2, body=b"\x01\x00\x00\x00\x00"):
@@ -663,6 +681,101 @@ class ServerTestCase(ServerFixture):
         self.assertIsNotNone(item)
         self.assertEqual(item.name, "保存局")
         self.assertEqual(item.network_type, "bs")
+
+    # -- 局ロゴ ------------------------------------------------------------
+
+    def put_logo(self, nid=4, logo_id=0x65, logo_type=5, version=1, data=None):
+        return self.request(
+            "PUT", f"/api/logo/{nid}/{logo_id}/{logo_type}",
+            data=arib_logo_png() if data is None else data,
+            headers={
+                "Content-Type": "image/png",
+                "X-EPG-Logo-Version": str(version),
+            },
+        )
+
+    def test_logo_round_trip_gains_a_palette(self):
+        status, _, _ = self.put_logo()
+        self.assertEqual(status, 200)
+
+        status, headers, body = self.request("GET", "/api/logo/4/101/5")
+        self.assertEqual(status, 200)
+        self.assertEqual(headers["Content-Type"], "image/png")
+        # 送ったものは PLTE を持たないが、返ってくるものは持つ。
+        self.assertNotIn(b"PLTE", arib_logo_png())
+        self.assertIn(b"PLTE", body)
+        self.assertIn(b"tRNS", body)
+        self.assertIn(b"IDAT", body)
+
+    def test_logo_is_cached_by_version(self):
+        self.put_logo(version=3)
+        status, headers, _ = self.request("GET", "/api/logo/4/101/5")
+        self.assertEqual(status, 200)
+        etag = headers["ETag"]
+        self.assertIn("3", etag)
+        self.assertIn("max-age", headers["Cache-Control"])
+
+        status, _, body = self.request(
+            "GET", "/api/logo/4/101/5", headers={"If-None-Match": etag}
+        )
+        self.assertEqual(status, 304)
+        self.assertEqual(body, b"")
+
+    def test_logo_list_is_offered_as_text_for_tvtest(self):
+        self.put_logo(nid=0x000B, logo_id=0x101, logo_type=5, version=2)
+        status, _, body = self.request("GET", "/api/logos?format=text")
+        self.assertEqual(status, 200)
+        self.assertEqual(body.decode("utf-8").strip(), "11 257 5 2")
+
+        status, _, body = self.request("GET", "/api/logos")
+        self.assertEqual(json.loads(body)["logos"][0]["logo_type"], 5)
+
+    def test_logo_that_is_not_a_png_is_rejected(self):
+        status, _, body = self.put_logo(data=b"definitely not a png")
+        self.assertEqual(status, 400)
+        self.assertTrue(json.loads(body)["error"])
+        status, _, _ = self.request("GET", "/api/logo/4/101/5")
+        self.assertEqual(status, 404)
+
+    def test_guide_points_at_the_logo_of_each_service(self):
+        self.put(service_blob(event_blob(), sid=0xE4))
+        self.put_logo(logo_id=0x101, version=4)
+        metadata = {"services": [{
+            "nid": 4, "tsid": 0x4010, "sid": 0xE4, "name": "ロゴ局", "order": 1,
+            "logo_id": 0x101, "logo_type": 5, "logo_version": 4,
+        }]}
+        status, _, _ = self.request(
+            "PUT", "/api/service-metadata",
+            data=json.dumps(metadata, ensure_ascii=False).encode("utf-8"),
+        )
+        self.assertEqual(status, 200)
+
+        status, _, body = self.request("GET", "/api/guide?date=2026-08-29")
+        service = json.loads(body)["services"][0]
+        self.assertEqual(service["logo"], "/api/logo/4/257/5?v=4")
+
+    def test_guide_omits_a_logo_the_server_does_not_hold(self):
+        self.put(service_blob(event_blob(), sid=0xE4))
+        metadata = {"services": [{
+            "nid": 4, "tsid": 0x4010, "sid": 0xE4, "name": "ロゴ待ち局", "order": 1,
+            "logo_id": 0x101, "logo_type": 5, "logo_version": 4,
+        }]}
+        self.request(
+            "PUT", "/api/service-metadata",
+            data=json.dumps(metadata, ensure_ascii=False).encode("utf-8"),
+        )
+        status, _, body = self.request("GET", "/api/guide?date=2026-08-29")
+        self.assertNotIn("logo", json.loads(body)["services"][0])
+
+    def test_logos_survive_restart(self):
+        self.put_logo(version=7)
+        reopened_store = server.Store(self.data_dir)
+        reopened = server.Context(reopened_store, server.EventBus(), token="secret")
+        result = reopened.logos.get_png(server.LogoKey(4, 0x65, 5))
+        self.assertIsNotNone(result)
+        png, version = result
+        self.assertEqual(version, 7)
+        self.assertIn(b"PLTE", png)
 
     def test_known_satellite_networks_are_classified_and_migrated(self):
         self.assertEqual(server.normalize_network_type(None, 0x000B), "bs")

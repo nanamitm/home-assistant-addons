@@ -29,6 +29,7 @@ sync store. It provides:
 - service columns and a vertical time axis starting at 04:00;
 - instant filtering between terrestrial, BS, CS and other services;
 - a **Services** filter that shows only the main services by default;
+- the channel logo in front of each station name, where one has arrived;
 - event blocks sized by their broadcast duration and coloured by genre;
 - a shared variable-height timeline that keeps even short events readable;
 - day navigation, zoom levels and a current-time marker;
@@ -48,6 +49,25 @@ are linked to another service on the same transport stream by the EIT event
 sharing descriptor. Names cannot be used for this: BS Nittele and BS-TBS give
 their sub channels exactly the same name as the base service, yet some of them
 carry their own programs.
+
+## Channel logos
+
+An updated TVTest uploads the logos it has collected from the broadcast when
+EPG sharing starts, and sends only the ones the add-on does not already hold.
+A logo belongs to a network and a logo ID rather than to a single service, so
+the stations of one network share a single copy.
+
+The bytes are stored exactly as they were broadcast. ARIB delivers a logo as an
+indexed PNG that carries no `PLTE` chunk, because the receiver is expected to
+apply the 128 colour palette the standard defines; a browser shown such a file
+draws nothing. The add-on inserts that palette after the header, leaving the
+image data untouched, and serves the result from `/api/logo/<nid>/<id>/<type>`
+with a long cache lifetime keyed to the logo version.
+
+Only logo type 5 (64x36) reaches advanced BS, so TVTest prefers that type. A
+logo is left out of the guide until it arrives; the station name is shown on
+its own in the meantime. Logos are drawn on a dark chip because their artwork
+assumes a dark background.
 
 An updated TVTest sends its channel names, order and broadcast network type
 when EPG sharing starts. Data received from an older TVTest remains fully

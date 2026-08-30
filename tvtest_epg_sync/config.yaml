@@ -1,5 +1,5 @@
 name: TVTest EPG Sync
-version: "1.1.5"
+version: "1.2.0"
 slug: tvtest_epg_sync
 description: Relays EPG between TVTest instances on a LAN, one service at a time
 url: https://github.com/nanamitm/home-assistant-addons/tree/main/tvtest_epg_sync

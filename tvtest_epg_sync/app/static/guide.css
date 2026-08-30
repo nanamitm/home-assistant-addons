@@ -70,9 +70,15 @@ h1 { margin: 0; font-size: 1.2rem; }
 .channel-viewport { overflow: hidden; border-bottom: 1px solid var(--border); background: var(--panel-2); }
 .channel-headers { display: flex; height: var(--header-height); will-change: transform; }
 .channel-header {
-  flex: 0 0 var(--column-width); display: flex; flex-direction: column; justify-content: center;
+  flex: 0 0 var(--column-width); display: flex; align-items: center; gap: .4rem;
   padding: .35rem .5rem; border-right: 1px solid var(--border); overflow: hidden;
 }
+/* ARIB のロゴは暗い背景に置く意匠なので、明るいテーマでも下地を敷く。 */
+.channel-logo {
+  flex: none; height: 22px; width: auto; max-width: 40px; object-fit: contain;
+  padding: 2px; border-radius: 3px; background: #1a1d24;
+}
+.channel-text { min-width: 0; }
 .channel-name { font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .channel-id { color: var(--muted); font: .72rem ui-monospace, Consolas, monospace; }
 .time-viewport { overflow: hidden; border-right: 1px solid var(--border); background: var(--panel-2); }
