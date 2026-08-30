@@ -539,6 +539,7 @@ class Context:
 
 SERVICE_PATH_RE = re.compile(r"^/api/service/(\d+)/(\d+)/(\d+)$")
 GUIDE_EVENT_PATH_RE = re.compile(r"^/api/guide/event/(\d+)/(\d+)/(\d+)/(\d+)$")
+STATIC_PATH_RE = re.compile(r"^/static/(guide\.(?:css|js))$")
 
 
 def parse_guide_range(query: str) -> tuple[datetime, datetime]:
@@ -721,7 +722,14 @@ class Handler(BaseHTTPRequestHandler):
 
         try:
             if method == "GET" and path in ("/", "/index.html"):
-                self._handle_index(prefix)
+                self._handle_app(prefix)
+                return
+            if method == "GET" and path == "/status":
+                self._handle_status(prefix)
+                return
+            static = STATIC_PATH_RE.match(path)
+            if method == "GET" and static:
+                self._handle_static(static.group(1))
                 return
             if method == "GET" and path == "/api/health":
                 self._handle_health()
@@ -969,7 +977,37 @@ class Handler(BaseHTTPRequestHandler):
         finally:
             self.context.bus.unsubscribe(q)
 
-    def _handle_index(self, prefix: str) -> None:
+    def _handle_app(self, prefix: str) -> None:
+        path = os.path.join(APP_DIR, "static", "index.html")
+        try:
+            with open(path, "r", encoding="utf-8") as file:
+                template = file.read()
+        except OSError:
+            self._send_error_json(HTTPStatus.INTERNAL_SERVER_ERROR, "画面を読み込めません")
+            return
+
+        base_json = json.dumps(prefix, ensure_ascii=False)
+        # script 要素を閉じられないよう JSON 内の HTML 記号をエスケープする
+        base_json = base_json.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+        body = (
+            template.replace("__BASE_PATH__", escape(prefix))
+            .replace("__BASE_JSON__", base_json)
+            .encode("utf-8")
+        )
+        self._send(HTTPStatus.OK, body, "text/html; charset=utf-8")
+
+    def _handle_static(self, name: str) -> None:
+        path = os.path.join(APP_DIR, "static", name)
+        try:
+            with open(path, "rb") as file:
+                body = file.read()
+        except OSError:
+            self._send_error_json(HTTPStatus.NOT_FOUND, "ファイルがありません")
+            return
+        content_type = "text/css; charset=utf-8" if name.endswith(".css") else "text/javascript; charset=utf-8"
+        self._send(HTTPStatus.OK, body, content_type)
+
+    def _handle_status(self, prefix: str) -> None:
         entries = self.context.store.list_entries()
         body = render_status_page(entries, self.context, prefix).encode("utf-8")
         self._send(HTTPStatus.OK, body, "text/html; charset=utf-8")

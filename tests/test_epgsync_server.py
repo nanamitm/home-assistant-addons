@@ -435,11 +435,31 @@ class ServerTestCase(ServerFixture):
 
         html = body.decode("utf-8")
         self.assertIn("TVTest EPG Sync", html)
-        # 自動更新のための SSE 購読が埋め込まれていること
-        self.assertIn("EventSource", html)
-        self.assertIn("/api/events?ui=1", html)
-        # JS を無効にしていても中身が見えること
+        self.assertIn("番組表", html)
+        self.assertIn("同期状態", html)
+        self.assertIn('/static/guide.css', html)
+        self.assertIn('/static/guide.js', html)
+
+    def test_static_guide_assets(self):
+        status, headers, body = self.request("GET", "/static/guide.css", token=None)
+        self.assertEqual(status, 200)
+        self.assertIn("text/css", headers["Content-Type"])
+        self.assertIn(b"event-card", body)
+
+        status, headers, body = self.request("GET", "/static/guide.js", token=None)
+        self.assertEqual(status, 200)
+        self.assertIn("text/javascript", headers["Content-Type"])
+        self.assertIn(b"EventSource", body)
+        self.assertIn(b"/api/events?ui=1", body)
+
+    def test_fallback_status_page(self):
+        self.put(make_blob())
+        status, headers, body = self.request("GET", "/status", token=None)
+        self.assertEqual(status, 200)
+        self.assertIn("text/html", headers["Content-Type"])
+        html = body.decode("utf-8")
         self.assertIn("0004/4010/00E4", html)
+        self.assertIn("EventSource", html)
 
     def test_services_json_has_summary(self):
         status, _, body = self.request("GET", "/api/services")
@@ -545,6 +565,15 @@ class ServerTestCase(ServerFixture):
         )
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(body)["status"], "ok")
+
+        prefix = "/api/hassio_ingress/abc"
+        status, _, body = self.request(
+            "GET", prefix + "/", headers={"X-Ingress-Path": prefix}, token=None
+        )
+        self.assertEqual(status, 200)
+        html = body.decode("utf-8")
+        self.assertIn(prefix + "/static/guide.css", html)
+        self.assertIn('window.EPGSYNC_BASE = "' + prefix + '"', html)
 
 
 class RealBlobTestCase(ServerFixture):
