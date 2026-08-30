@@ -3,10 +3,9 @@
 
 LAN 上の複数の TVTest が取得した EPG を、サービス単位で融通しあうための中継サーバ。
 
-サーバは番組情報の中身(文字列やジャンルなど)を一切解釈しない。
-クライアントが送ってきたバイト列(LibISDB の EPGDataSerializer が出力する
-"EPG-SVC1" 形式)をそのまま保管し、先頭 32 バイトの固定ヘッダだけを読んで
-サービスの識別子とバージョンを取り出す。
+同期ストアは、クライアントが送ってきたバイト列(LibISDB の
+EPGDataSerializer が出力する "EPG-SVC1" 形式)をそのまま正本として保管する。
+番組表 API が要求された時だけ別モジュールで内容を読み取り、表示用にキャッシュする。
 
 そのためサーバ側に LibISDB を持つ必要がなく、Windows と Linux の
 wchar_t の差(CharType 問題)の影響も受けない。
@@ -25,10 +24,19 @@ import struct
 import sys
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Iterator, Optional
+from urllib.parse import parse_qs
+
+# server.py はアドオンでは直接実行され、テストではファイルパスから読み込まれる。
+# どちらでも同じディレクトリのデコーダーを見つけられるようにする。
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+if APP_DIR not in sys.path:
+    sys.path.insert(0, APP_DIR)
+
+import epg_parser
 
 LOG = logging.getLogger("epgsync")
 
@@ -378,15 +386,192 @@ class EventBus:
                 LOG.debug("SSE の購読者が滞留しています。")
 
 
+class GuideCache:
+    """保存 blob を ETag 単位で解析して再利用する。"""
+
+    def __init__(self, store: Store) -> None:
+        self._store = store
+        self._lock = threading.RLock()
+        self._cache: dict[ServiceKey, tuple[str, Optional[epg_parser.EpgService], str]] = {}
+
+    def invalidate(self, key: ServiceKey) -> None:
+        with self._lock:
+            self._cache.pop(key, None)
+
+    def get(
+        self, key: ServiceKey
+    ) -> Optional[tuple[Entry, Optional[epg_parser.EpgService], str]]:
+        result = self._store.get_blob(key)
+        if result is None:
+            return None
+        entry, blob = result
+
+        with self._lock:
+            cached = self._cache.get(key)
+            if cached is not None and cached[0] == entry.etag:
+                return entry, cached[1], cached[2]
+
+        parsed: Optional[epg_parser.EpgService]
+        error = ""
+        try:
+            parsed = epg_parser.parse_service(blob)
+        except epg_parser.EpgParseError as exc:
+            parsed = None
+            error = str(exc)
+            LOG.warning("%s の番組表データを解析できません: %s", key, exc)
+
+        with self._lock:
+            self._cache[key] = (entry.etag, parsed, error)
+        return entry, parsed, error
+
+    def build_guide(self, first: datetime, last: datetime) -> dict[str, Any]:
+        parsed_services: list[tuple[Entry, epg_parser.EpgService]] = []
+        services: list[dict[str, Any]] = []
+
+        for entry in self._store.list_entries():
+            result = self.get(entry.key)
+            if result is None:
+                continue
+            current, parsed, error = result
+            item: dict[str, Any] = {
+                "nid": current.key.nid,
+                "tsid": current.key.tsid,
+                "sid": current.key.sid,
+                "name": str(current.key),
+                "etag": current.etag,
+                "event_count": current.event_count,
+                "events": [],
+            }
+            if parsed is None:
+                item["parse_error"] = error
+            else:
+                parsed_services.append((current, parsed))
+            services.append(item)
+
+        event_index: dict[tuple[int, int, int, int], epg_parser.EpgEvent] = {}
+        for _entry, parsed in parsed_services:
+            for event in parsed.events:
+                event_index[(event.key.nid, event.key.tsid, event.key.sid, event.event_id)] = event
+
+        item_by_key = {
+            (item["nid"], item["tsid"], item["sid"]): item for item in services
+        }
+        for entry, parsed in parsed_services:
+            item = item_by_key[(entry.key.nid, entry.key.tsid, entry.key.sid)]
+            for event in parsed.events:
+                if event.end <= first or event.start >= last:
+                    continue
+                data = epg_parser.event_to_dict(event)
+                _fill_common_event(data, event, event_index)
+                item["events"].append(data)
+
+        return {
+            "from": first.isoformat(),
+            "to": last.isoformat(),
+            "generated_at": datetime.now(epg_parser.JST).replace(microsecond=0).isoformat(),
+            "services": services,
+        }
+
+    def get_event(
+        self, key: ServiceKey, event_id: int
+    ) -> Optional[tuple[Entry, epg_parser.EpgEvent, dict[str, Any]]]:
+        result = self.get(key)
+        if result is None or result[1] is None:
+            return None
+        entry, parsed, _error = result
+        event = next((item for item in parsed.events if item.event_id == event_id), None)
+        if event is None:
+            return None
+
+        index: dict[tuple[int, int, int, int], epg_parser.EpgEvent] = {}
+        if event.common_event is not None:
+            common_key = ServiceKey(key.nid, key.tsid, event.common_event.service_id)
+            common_result = self.get(common_key)
+            if common_result is not None and common_result[1] is not None:
+                for candidate in common_result[1].events:
+                    index[(key.nid, key.tsid, common_key.sid, candidate.event_id)] = candidate
+
+        data = epg_parser.event_to_dict(event, include_details=True)
+        _fill_common_event(data, event, index, include_details=True)
+        return entry, event, data
+
+
+def _fill_common_event(
+    data: dict[str, Any],
+    event: epg_parser.EpgEvent,
+    index: dict[tuple[int, int, int, int], epg_parser.EpgEvent],
+    include_details: bool = False,
+) -> None:
+    if not event.is_common_event or event.common_event is None:
+        return
+    target_key = (
+        event.key.nid,
+        event.key.tsid,
+        event.common_event.service_id,
+        event.common_event.event_id,
+    )
+    data["common_event"] = {
+        "sid": event.common_event.service_id,
+        "event_id": event.common_event.event_id,
+    }
+    target = index.get(target_key)
+    if target is None:
+        return
+    common = epg_parser.event_to_dict(target, include_details=include_details)
+    if not data.get("title"):
+        data["title"] = common["title"]
+    if not data.get("text"):
+        data["text"] = common["text"]
+    if not data.get("genres"):
+        data["genres"] = common["genres"]
+    if include_details and not data.get("extended_text"):
+        data["extended_text"] = common.get("extended_text", [])
+
+
 class Context:
     def __init__(self, store: Store, bus: EventBus, token: str) -> None:
         self.store = store
         self.bus = bus
         self.token = token
+        self.guide = GuideCache(store)
         self.started_at = utcnow()
 
 
 SERVICE_PATH_RE = re.compile(r"^/api/service/(\d+)/(\d+)/(\d+)$")
+GUIDE_EVENT_PATH_RE = re.compile(r"^/api/guide/event/(\d+)/(\d+)/(\d+)/(\d+)$")
+
+
+def parse_guide_range(query: str) -> tuple[datetime, datetime]:
+    """番組表 API の date または from / hours を JST の範囲へ変換する。"""
+    params = parse_qs(query, keep_blank_values=True)
+    hours_text = params.get("hours", ["24"])[-1]
+    try:
+        hours = int(hours_text)
+    except ValueError as exc:
+        raise ValueError("hours は整数で指定してください") from exc
+    if not 1 <= hours <= 48:
+        raise ValueError("hours は 1 から 48 の範囲で指定してください")
+
+    if "from" in params:
+        value = params["from"][-1]
+        try:
+            first = datetime.fromisoformat(value)
+        except ValueError as exc:
+            raise ValueError("from の日時形式が不正です") from exc
+        if first.tzinfo is None:
+            first = first.replace(tzinfo=epg_parser.JST)
+        else:
+            first = first.astimezone(epg_parser.JST)
+    else:
+        date_text = params.get("date", [datetime.now(epg_parser.JST).date().isoformat()])[-1]
+        try:
+            day = datetime.strptime(date_text, "%Y-%m-%d")
+        except ValueError as exc:
+            raise ValueError("date は YYYY-MM-DD 形式で指定してください") from exc
+        # TVTest の既定に近い朝4時区切り。UI 側は from を指定して変更できる。
+        first = day.replace(hour=4, tzinfo=epg_parser.JST)
+
+    return first, first + timedelta(hours=hours)
 
 
 def wants_text(query: str) -> bool:
@@ -551,6 +736,27 @@ class Handler(BaseHTTPRequestHandler):
             if method == "GET" and path == "/api/events":
                 self._handle_events(query)
                 return
+            if method == "GET" and path == "/api/guide":
+                self._handle_guide(query)
+                return
+
+            guide_event = GUIDE_EVENT_PATH_RE.match(path)
+            if method == "GET" and guide_event:
+                try:
+                    key = ServiceKey(
+                        int(guide_event.group(1)),
+                        int(guide_event.group(2)),
+                        int(guide_event.group(3)),
+                    )
+                    event_id = int(guide_event.group(4))
+                except BlobError as e:
+                    self._send_error_json(HTTPStatus.BAD_REQUEST, str(e))
+                    return
+                if not 0 <= event_id <= 0xFFFF:
+                    self._send_error_json(HTTPStatus.BAD_REQUEST, "番組 ID の範囲が不正です")
+                    return
+                self._handle_guide_event(key, event_id)
+                return
 
             m = SERVICE_PATH_RE.match(path)
             if m:
@@ -614,6 +820,23 @@ class Handler(BaseHTTPRequestHandler):
                 "summary": {"subscribers": self.context.bus.subscriber_count()},
             },
         )
+
+    def _handle_guide(self, query: str) -> None:
+        try:
+            first, last = parse_guide_range(query)
+        except ValueError as exc:
+            self._send_error_json(HTTPStatus.BAD_REQUEST, str(exc))
+            return
+        self._send_json(HTTPStatus.OK, self.context.guide.build_guide(first, last))
+
+    def _handle_guide_event(self, key: ServiceKey, event_id: int) -> None:
+        result = self.context.guide.get_event(key, event_id)
+        if result is None:
+            self._send_error_json(HTTPStatus.NOT_FOUND, "番組がありません")
+            return
+        entry, _event, data = result
+        data.update({"nid": key.nid, "tsid": key.tsid, "sid": key.sid})
+        self._send_json(HTTPStatus.OK, {"event": data}, {"ETag": entry.etag})
 
     def _handle_get_service(self, key: ServiceKey) -> None:
         result = self.context.store.get_blob(key)
@@ -682,6 +905,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if result == "stored":
+            self.context.guide.invalidate(key)
             LOG.info(
                 "%s を更新しました (%d 番組, %d バイト, version=%d, from %s)",
                 key, event_count, len(blob), version, source,
@@ -705,6 +929,7 @@ class Handler(BaseHTTPRequestHandler):
         if not self.context.store.delete(key):
             self._send_error_json(HTTPStatus.NOT_FOUND, "サービスがありません")
             return
+        self.context.guide.invalidate(key)
         LOG.info("%s を削除しました。", key)
         self.context.bus.publish(
             {"type": "deleted", "nid": key.nid, "tsid": key.tsid, "sid": key.sid}

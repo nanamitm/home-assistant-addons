@@ -18,6 +18,8 @@ import unittest
 import urllib.error
 import urllib.request
 
+from tests.test_epgsync_parser import event_blob, service_blob
+
 # 他のアドオンにも app/server.py があるため、"server" という名前で取り込むと
 # 先に読み込まれたほうが sys.modules に残り、取り違えが起きる。
 # パスを指定して、このアドオン専用の名前で読み込む。
@@ -444,6 +446,68 @@ class ServerTestCase(ServerFixture):
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(body)["summary"]["subscribers"], 0)
 
+    # -- 番組表 API -------------------------------------------------------
+
+    def test_guide_api_filters_time_range(self):
+        self.put(service_blob(event_blob(hour=2), event_blob(event_id=0x1001, hour=21)))
+
+        status, _, body = self.request("GET", "/api/guide?date=2026-08-29")
+        self.assertEqual(status, 200)
+        payload = json.loads(body)
+        self.assertEqual(payload["from"], "2026-08-29T04:00:00+09:00")
+        self.assertEqual(payload["to"], "2026-08-30T04:00:00+09:00")
+        events = payload["services"][0]["events"]
+        self.assertEqual([item["event_id"] for item in events], [0x1001])
+        self.assertEqual(events[0]["title"], "テスト番組『表題』")
+
+    def test_guide_api_accepts_explicit_range(self):
+        self.put(service_blob(event_blob(hour=21)))
+        status, _, body = self.request(
+            "GET", "/api/guide?from=2026-08-29T12:00:00%2B00:00&hours=2"
+        )
+        self.assertEqual(status, 200)
+        payload = json.loads(body)
+        self.assertEqual(payload["from"], "2026-08-29T21:00:00+09:00")
+        self.assertEqual(len(payload["services"][0]["events"]), 1)
+
+    def test_guide_api_rejects_bad_range(self):
+        status, _, body = self.request("GET", "/api/guide?date=bad")
+        self.assertEqual(status, 400)
+        self.assertIn("YYYY-MM-DD", json.loads(body)["error"])
+
+        status, _, body = self.request("GET", "/api/guide?date=2026-08-29&hours=100")
+        self.assertEqual(status, 400)
+        self.assertIn("1 から 48", json.loads(body)["error"])
+
+    def test_guide_event_details(self):
+        self.put(service_blob(event_blob()))
+        status, headers, body = self.request(
+            "GET", "/api/guide/event/4/16400/228/4096"
+        )
+        self.assertEqual(status, 200)
+        self.assertIn("ETag", headers)
+        event = json.loads(body)["event"]
+        self.assertEqual(event["title"], "テスト番組『表題』")
+        self.assertEqual(event["extended_text"][0]["description"], "出演者")
+        self.assertEqual(event["audio"][0]["text"], "主音声")
+
+    def test_guide_cache_follows_service_etag(self):
+        self.put(service_blob(event_blob(name="更新前")))
+        _, _, body = self.request("GET", "/api/guide?date=2026-08-29")
+        self.assertEqual(json.loads(body)["services"][0]["events"][0]["title"], "更新前")
+
+        self.put(service_blob(event_blob(updated_time=3000, name="更新後")))
+        _, _, body = self.request("GET", "/api/guide?date=2026-08-29")
+        self.assertEqual(json.loads(body)["services"][0]["events"][0]["title"], "更新後")
+
+    def test_malformed_body_does_not_break_whole_guide(self):
+        self.put(make_blob(body=b"\x04\xff\xff\xff\x7f"))
+        status, _, body = self.request("GET", "/api/guide?date=2026-08-29")
+        self.assertEqual(status, 200)
+        service = json.loads(body)["services"][0]
+        self.assertEqual(service["events"], [])
+        self.assertTrue(service["parse_error"])
+
     def test_ui_subscriber_is_not_counted(self):
         ready = threading.Event()
         stop = threading.Event()
@@ -521,4 +585,3 @@ class RealBlobTestCase(ServerFixture):
         self.assertEqual(status, 200)
         # サーバを経由してもバイト単位で変化しないこと
         self.assertEqual(got, self.blob)
-

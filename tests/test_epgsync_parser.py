@@ -42,19 +42,25 @@ def chunk(tag, body=b""):
     return u8(tag) + u32(len(body)) + body
 
 
-def event_blob(event_id=0x1000, updated_time=1000, common=False):
+def event_blob(
+    event_id=0x1000,
+    updated_time=1000,
+    common=False,
+    name="テスト番組『表題』",
+    hour=21,
+):
     flags = 4 | 0x08 | 0x10 | 0x20
     if common:
         flags |= 0x100
     event = (
         u16(event_id)
         + u16(flags)
-        + struct.pack("<HBBBBBB", 2026, 8, 29, 6, 21, 30, 0)
+        + struct.pack("<HBBBBBB", 2026, 8, 29, 6, hour, 30, 0)
         + u32(3600)
         + u64(updated_time)
     )
     result = chunk(epg_parser.TAG_EVENT, event)
-    result += chunk(epg_parser.TAG_EVENT_NAME, string("テスト番組『表題』"))
+    result += chunk(epg_parser.TAG_EVENT_NAME, string(name))
     result += chunk(epg_parser.TAG_EVENT_TEXT, string("概要のテキスト\r\n2行目"))
     extended = (
         u8(2)
