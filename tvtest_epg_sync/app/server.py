@@ -612,6 +612,40 @@ class GuideCache:
             self._cache[key] = (entry.etag, parsed, error)
         return entry, parsed, error
 
+    # 同じ TS の基準サービスから何番目までを枝番として扱うか。
+    # 地上波・BS のサブチャンネルは基準サービスの直後の SID に並ぶ。
+    MAX_SUB_SERVICE_OFFSET = 7
+
+    @classmethod
+    def _apply_fallback_names(cls, services: list[dict[str, Any]]) -> None:
+        """局名が届いていないサービスに、同じ TS の局名から仮の名前を付ける。
+
+        TVTest のチャンネルリストに載らないデータ放送などは局名を送れない。
+        キー文字列のままでは何の局か分からないので、同じ NID/TSID の基準
+        サービス(SID が最も小さい局)の名前を借りて枝番か SID を添える。
+        """
+        named: dict[tuple[int, int], list[tuple[int, str]]] = {}
+        for item in services:
+            if "order" in item:
+                named.setdefault((item["nid"], item["tsid"]), []).append(
+                    (item["sid"], item["name"])
+                )
+
+        for item in services:
+            if "order" in item:
+                continue
+            siblings = named.get((item["nid"], item["tsid"]))
+            if not siblings:
+                continue
+            sid = item["sid"]
+            base_sid, base_name = min(siblings)
+            offset = sid - base_sid
+            if 1 <= offset <= cls.MAX_SUB_SERVICE_OFFSET:
+                item["name"] = f"{base_name} {offset + 1}"
+            else:
+                item["name"] = f"{base_name} ({sid:04X})"
+            item["name_fallback"] = True
+
     def build_guide(self, first: datetime, last: datetime) -> dict[str, Any]:
         parsed_services: list[tuple[Entry, epg_parser.EpgService]] = []
         services: list[dict[str, Any]] = []
@@ -650,6 +684,8 @@ class GuideCache:
             else:
                 parsed_services.append((current, parsed))
             services.append(item)
+
+        self._apply_fallback_names(services)
 
         event_index: dict[tuple[int, int, int, int], epg_parser.EpgEvent] = {}
         for _entry, parsed in parsed_services:
