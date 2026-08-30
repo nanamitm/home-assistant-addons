@@ -606,6 +606,24 @@ class ServerTestCase(ServerFixture):
         self.assertEqual(by_sid[0x2BC]["name"], "総合テレビ (02BC)")
         self.assertTrue(by_sid[0x2BC]["name_fallback"])
 
+    def test_guide_marks_simulcast_sub_channels(self):
+        # event_blob(common=True) の共有先は SID 0xE5 に固定されている。
+        base = [event_blob(event_id=0x1000 + i, hour=10 + i) for i in range(5)]
+        self.put(service_blob(*base, sid=0xE5))
+        # 全番組が本局と共有＝完全な同時放送。
+        shared = [event_blob(event_id=0x2000 + i, hour=10 + i, common=True) for i in range(5)]
+        self.put(service_blob(*shared, sid=0xE6))
+        # 独自番組が混ざるサブチャンネルは同時放送とみなさない。
+        mixed = [event_blob(event_id=0x3000 + i, hour=10 + i, common=(i < 2)) for i in range(5)]
+        self.put(service_blob(*mixed, sid=0xE7))
+
+        status, _, body = self.request("GET", "/api/guide?date=2026-08-29")
+        self.assertEqual(status, 200)
+        by_sid = {item["sid"]: item for item in json.loads(body)["services"]}
+        self.assertNotIn("simulcast_of", by_sid[0xE5])
+        self.assertEqual(by_sid[0xE6]["simulcast_of"], 0xE5)
+        self.assertNotIn("simulcast_of", by_sid[0xE7])
+
     def test_service_metadata_requires_token_and_valid_data(self):
         payload = json.dumps({"services": []}).encode("utf-8")
         status, _, _ = self.request(

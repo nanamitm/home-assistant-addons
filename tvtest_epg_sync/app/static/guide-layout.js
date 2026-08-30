@@ -45,25 +45,22 @@
   // ARIB のサービス形式。デジタルTVとデジタル音声だけを主要サービスとみなす。
   var MAIN_SERVICE_TYPES = [0x01, 0x02];
 
-  function isMainService(service, seenNames) {
+  function isMainService(service) {
     // 局名が推測のものはデータ放送などなので主要サービスにしない。
     if (service.name_fallback) return false;
     // 局名が届いていれば形式で判定する。ワンセグとデータ放送は 0xC0。
     if (typeof service.service_type === "number"
         && MAIN_SERVICE_TYPES.indexOf(service.service_type) < 0) return false;
-    // 同じTSに同名のサービスが並ぶのは同時放送のサブチャンネル。最初だけ残す。
-    var key = service.nid + "/" + service.tsid + "/" + service.name;
-    if (seenNames[key]) return false;
-    seenNames[key] = true;
+    // 本局と同じ番組しか流さないサブチャンネルはサーバが印を付けている。
+    // 独自番組を持つサブチャンネルには付かないので、局名が本局と同じでも残る。
+    if (typeof service.simulcast_of === "number") return false;
     return true;
   }
 
   function filterServices(services, networkType, includeAllServices) {
-    var seenNames = {};
     return (services || []).filter(function (service) {
       if (networkType && networkType !== "all" && service.network_type !== networkType) return false;
-      if (includeAllServices) return true;
-      return isMainService(service, seenNames);
+      return includeAllServices || isMainService(service);
     });
   }
 

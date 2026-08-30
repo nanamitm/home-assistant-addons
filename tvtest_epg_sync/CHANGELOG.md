@@ -1,3 +1,10 @@
+## 1.1.5
+
+- Decide which sub channels are simulcasts from the EIT event sharing
+  descriptor instead of the channel name. BS Nittele and BS-TBS name their sub
+  channels exactly like the base service, so the guide dropped the ones that
+  carry their own programs.
+
 ## 1.1.4
 
 - Show only the main services by default, hiding one-seg, data broadcast and

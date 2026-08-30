@@ -38,11 +38,16 @@ sync store. It provides:
 Use the **Sync status** tab to see the storage and client information that was
 shown by earlier versions of the add-on.
 
-The **Services** filter defaults to **Main only**, which leaves out one-seg
-and data broadcast services (ARIB service type `0xC0`), services whose name had
-to be guessed, and sub channels that carry the same name as an earlier service
-on the same transport stream. Choose **All** to list every service the store
-holds.
+The **Services** filter defaults to **Main only**, which leaves out one-seg and
+data broadcast services (ARIB service type `0xC0`), services whose name had to
+be guessed, and sub channels that only simulcast their base service. Choose
+**All** to list every service the store holds.
+
+A sub channel counts as a simulcast when at least 90% of the events it holds
+are linked to another service on the same transport stream by the EIT event
+sharing descriptor. Names cannot be used for this: BS Nittele and BS-TBS give
+their sub channels exactly the same name as the base service, yet some of them
+carry their own programs.
 
 An updated TVTest sends its channel names, order and broadcast network type
 when EPG sharing starts. Data received from an older TVTest remains fully

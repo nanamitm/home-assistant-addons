@@ -646,6 +646,54 @@ class GuideCache:
                 item["name"] = f"{base_name} ({sid:04X})"
             item["name_fallback"] = True
 
+    # 同時放送とみなす、共有イベントの割合と最低番組数。
+    SIMULCAST_RATIO = 0.9
+    SIMULCAST_MIN_EVENTS = 4
+
+    @classmethod
+    def _mark_simulcast_services(
+        cls,
+        services: list[dict[str, Any]],
+        parsed_services: list[tuple[Entry, epg_parser.EpgService]],
+    ) -> None:
+        """本局と同じ番組しか流さないサブチャンネルに simulcast_of を付ける。
+
+        局名では判別できない。BS日テレやBS-TBSのサブチャンネルは本局と
+        まったく同じ局名を名乗るが、独自番組を持つものと完全な同時放送の
+        ものがある。EIT のイベント共有記述子が指す先で見分ける。
+
+        判定には blob 内の全番組を使う。表示中の一日だけで数えると、日に
+        よって列が出たり消えたりしてしまう。
+        """
+        target_of: dict[ServiceKey, int] = {}
+        for entry, parsed in parsed_services:
+            if len(parsed.events) < cls.SIMULCAST_MIN_EVENTS:
+                continue
+            shared: dict[int, int] = {}
+            for event in parsed.events:
+                if not event.is_common_event or event.common_event is None:
+                    continue
+                sid = event.common_event.service_id
+                if sid == entry.key.sid:
+                    continue
+                shared[sid] = shared.get(sid, 0) + 1
+            if not shared:
+                continue
+            sid, hits = max(shared.items(), key=lambda item: (item[1], -item[0]))
+            if hits >= len(parsed.events) * cls.SIMULCAST_RATIO:
+                target_of[entry.key] = sid
+
+        # 表示順に見て、本局として残すと決めたサービスを指すものだけを隠す。
+        # 相手が未確定なら残すので、同じTSのサービスが全部消えることはない。
+        shown: set[tuple[int, int, int]] = set()
+        for item in services:
+            key = ServiceKey(item["nid"], item["tsid"], item["sid"])
+            target = target_of.get(key)
+            if target is not None and (key.nid, key.tsid, target) in shown:
+                item["simulcast_of"] = target
+            else:
+                shown.add((key.nid, key.tsid, key.sid))
+
     def build_guide(self, first: datetime, last: datetime) -> dict[str, Any]:
         parsed_services: list[tuple[Entry, epg_parser.EpgService]] = []
         services: list[dict[str, Any]] = []
@@ -686,6 +734,8 @@ class GuideCache:
             services.append(item)
 
         self._apply_fallback_names(services)
+
+        self._mark_simulcast_services(services, parsed_services)
 
         event_index: dict[tuple[int, int, int, int], epg_parser.EpgEvent] = {}
         for _entry, parsed in parsed_services:

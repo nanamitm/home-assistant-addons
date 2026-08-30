@@ -45,10 +45,10 @@ test('filters services by broadcast network without changing their order', () =>
   assert.deepEqual(filterServices(services, 'all'), services)
 })
 
-test('hides one-seg, data and duplicated sub services unless asked for them', () => {
+test('hides one-seg, data and simulcast services unless asked for them', () => {
   const services = [
     { name: '琉球朝日放送', nid: 0x7c14, tsid: 0x7c14, sid: 0xf820, service_type: 1 },
-    { name: '琉球朝日放送', nid: 0x7c14, tsid: 0x7c14, sid: 0xf821, service_type: 1 },
+    { name: '琉球朝日放送', nid: 0x7c14, tsid: 0x7c14, sid: 0xf821, service_type: 1, simulcast_of: 0xf820 },
     { name: 'ＮＨＫＥテレ２沖縄', nid: 0x7c11, tsid: 0x7c11, sid: 0xf809, service_type: 1 },
     { name: 'ＯＴＶワンセグ', nid: 0x7c17, tsid: 0x7c17, sid: 0xf9b8, service_type: 192 },
     { name: 'ＮＨＫ　ＢＳ (02BC)', nid: 4, tsid: 0x40f1, sid: 0x2bc, name_fallback: true },
@@ -58,6 +58,18 @@ test('hides one-seg, data and duplicated sub services unless asked for them', ()
     [0xf820, 0xf809]
   )
   assert.equal(filterServices(services, 'all', true).length, 5)
+})
+
+test('keeps a sub channel that shares its name with the base service', () => {
+  // BS日テレとBS-TBSのサブチャンネルは本局と同じ局名を名乗る。独自番組を
+  // 流すものはサーバが simulcast_of を付けないので、番組表に残す。
+  const services = [
+    { name: 'ＢＳ日テレ', nid: 4, tsid: 0x40d0, sid: 0x8d, service_type: 1 },
+    { name: 'ＢＳ日テレ', nid: 4, tsid: 0x40d0, sid: 0x8e, service_type: 1 },
+    { name: 'ＢＳ日テレ', nid: 4, tsid: 0x40d0, sid: 0x8f, service_type: 1, simulcast_of: 0x8d },
+  ]
+  assert.deepEqual(filterServices(services, 'all').map(item => item.sid), [0x8d, 0x8e])
+  assert.equal(filterServices(services, 'all', true).length, 3)
 })
 
 test('applies the broadcast network and service filters together', () => {
