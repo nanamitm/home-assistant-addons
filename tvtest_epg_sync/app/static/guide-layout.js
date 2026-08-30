@@ -42,5 +42,16 @@
       + (cumulativePixels[whole + 1] - cumulativePixels[whole]) * (position - whole);
   }
 
-  return { variableTimeline: variableTimeline, pixelAt: pixelAt };
+  function filterServices(services, networkType) {
+    if (!networkType || networkType === "all") return (services || []).slice();
+    return (services || []).filter(function (service) {
+      return service.network_type === networkType;
+    });
+  }
+
+  return {
+    variableTimeline: variableTimeline,
+    pixelAt: pixelAt,
+    filterServices: filterServices
+  };
 }));

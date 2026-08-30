@@ -3,6 +3,7 @@
 
   var base = window.EPGSYNC_BASE || "";
   var dateInput = document.getElementById("guide-date");
+  var networkFilter = document.getElementById("network-filter");
   var viewport = document.getElementById("program-viewport");
   var canvas = document.getElementById("program-canvas");
   var headers = document.getElementById("channel-headers");
@@ -86,11 +87,19 @@
     timeAxis.replaceChildren();
     canvas.replaceChildren();
 
-    var services = data.services || [];
-    if (!services.length) {
+    var allServices = data.services || [];
+    if (!allServices.length) {
       lastTimeline = null;
       showMessage("まだEPGを受信していません。TVTestからEPGが届くとここに表示されます。");
       summary.textContent = "0サービス";
+      return;
+    }
+
+    var services = window.EpgSyncGuideLayout.filterServices(allServices, networkFilter.value);
+    if (!services.length) {
+      lastTimeline = null;
+      showMessage("この放送波には表示できるサービスがありません。");
+      summary.textContent = "0サービス（全" + allServices.length + "）";
       return;
     }
 
@@ -175,7 +184,8 @@
       line.style.width = canvasWidth + "px";
       canvas.appendChild(line);
     }
-    summary.textContent = services.length + "サービス / " + eventTotal + "番組";
+    summary.textContent = services.length + "サービス / " + eventTotal + "番組"
+      + (services.length === allServices.length ? "" : "（全" + allServices.length + "サービス）");
   }
 
   function loadEvent(service, eventId) {
@@ -288,6 +298,10 @@
   document.getElementById("zoom").addEventListener("change", function (event) {
     minuteHeight = Number(event.target.value);
     document.documentElement.style.setProperty("--minute-height", minuteHeight + "px");
+    if (lastGuide) renderGuide(lastGuide);
+  });
+  networkFilter.addEventListener("change", function () {
+    viewport.scrollLeft = 0;
     if (lastGuide) renderGuide(lastGuide);
   });
   viewport.addEventListener("scroll", function () {

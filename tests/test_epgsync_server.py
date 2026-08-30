@@ -490,6 +490,7 @@ class ServerTestCase(ServerFixture):
         self.assertEqual(payload["from"], "2026-08-29T04:00:00+09:00")
         self.assertEqual(payload["to"], "2026-08-30T04:00:00+09:00")
         events = payload["services"][0]["events"]
+        self.assertEqual(payload["services"][0]["network_type"], "bs")
         self.assertEqual([item["event_id"] for item in events], [0x1001])
         self.assertEqual(events[0]["title"], "テスト番組『表題』")
 
@@ -551,11 +552,13 @@ class ServerTestCase(ServerFixture):
                 {
                     "nid": 4, "tsid": 0x4010, "sid": 0xE4,
                     "name": "総合テレビ", "group": "地デジ",
+                    "network_type": "terrestrial",
                     "remote_control_key": 1, "service_type": 1, "order": 20,
                 },
                 {
                     "nid": 4, "tsid": 0x4010, "sid": 0xE5,
                     "name": "教育テレビ", "group": "地デジ",
+                    "network_type": "terrestrial",
                     "remote_control_key": 2, "service_type": 1, "order": 10,
                 },
             ]
@@ -573,6 +576,7 @@ class ServerTestCase(ServerFixture):
         services = json.loads(body)["services"]
         self.assertEqual([item["name"] for item in services], ["教育テレビ", "総合テレビ"])
         self.assertEqual(services[0]["group"], "地デジ")
+        self.assertEqual(services[0]["network_type"], "terrestrial")
         self.assertEqual(services[0]["remote_control_key"], 2)
 
     def test_service_metadata_requires_token_and_valid_data(self):
@@ -587,6 +591,13 @@ class ServerTestCase(ServerFixture):
         )
         self.assertEqual(status, 400)
         self.assertTrue(json.loads(body)["error"])
+
+        invalid = json.dumps({"services": [{
+            "nid": 4, "tsid": 0x4010, "sid": 0xE4,
+            "name": "不正局", "network_type": "cable",
+        }]}).encode("utf-8")
+        status, _, _ = self.request("PUT", "/api/service-metadata", data=invalid)
+        self.assertEqual(status, 400)
 
     def test_service_metadata_survives_restart(self):
         metadata = {
@@ -606,6 +617,7 @@ class ServerTestCase(ServerFixture):
         item = reopened.metadata.get(server.ServiceKey(4, 0x4010, 0xE4))
         self.assertIsNotNone(item)
         self.assertEqual(item.name, "保存局")
+        self.assertEqual(item.network_type, "bs")
 
     def test_ui_subscriber_is_not_counted(self):
         ready = threading.Event()

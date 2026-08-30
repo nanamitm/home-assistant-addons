@@ -1,6 +1,6 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { variableTimeline, pixelAt } = require('../app/static/guide-layout.js')
+const { variableTimeline, pixelAt, filterServices } = require('../app/static/guide-layout.js')
 
 const start = Date.parse('2026-08-30T04:00:00+09:00')
 const end = start + 60 * 60000
@@ -33,4 +33,14 @@ test('uses a shared maximum scale instead of stacking channels separately', () =
 test('interpolates fractional minutes on the accumulated timeline', () => {
   const timeline = variableTimeline([{ events: [event(0, 5)] }], start, end, 2, 36)
   assert.equal(pixelAt(timeline.cumulativePixels, 2.5), 20)
+})
+
+test('filters services by broadcast network without changing their order', () => {
+  const services = [
+    { name: '地デジ1', network_type: 'terrestrial' },
+    { name: 'BS1', network_type: 'bs' },
+    { name: '地デジ2', network_type: 'terrestrial' },
+  ]
+  assert.deepEqual(filterServices(services, 'terrestrial').map(item => item.name), ['地デジ1', '地デジ2'])
+  assert.deepEqual(filterServices(services, 'all'), services)
 })

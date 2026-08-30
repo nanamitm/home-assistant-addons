@@ -1,3 +1,10 @@
+## 1.1.2
+
+- Add instant program-guide filtering for terrestrial, BS, CS and other
+  broadcast networks.
+- Accept TVTest's network classification in channel metadata while retaining a
+  compatible fallback for older clients.
+
 ## 1.1.1
 
 - Align program text to the top of each card.

@@ -391,9 +391,25 @@ class EventBus:
                 LOG.debug("SSE の購読者が滞留しています。")
 
 
+NETWORK_TYPES = frozenset(("terrestrial", "bs", "cs", "other"))
+
+
+def normalize_network_type(value: Any, network_id: int) -> str:
+    network_type = str(value or "").strip().lower()
+    if not network_type:
+        if network_id == 4:
+            return "bs"
+        if network_id in (6, 7, 10):
+            return "cs"
+        return "terrestrial"
+    if network_type not in NETWORK_TYPES:
+        raise ValueError("放送波種別が不正です")
+    return network_type
+
+
 class ServiceMetadata:
     __slots__ = (
-        "key", "name", "group", "remote_control_key", "service_type",
+        "key", "name", "group", "network_type", "remote_control_key", "service_type",
         "order", "source", "updated_at",
     )
 
@@ -402,6 +418,7 @@ class ServiceMetadata:
         key: ServiceKey,
         name: str,
         group: str,
+        network_type: str,
         remote_control_key: int,
         service_type: int,
         order: int,
@@ -411,6 +428,7 @@ class ServiceMetadata:
         self.key = key
         self.name = name
         self.group = group
+        self.network_type = network_type
         self.remote_control_key = remote_control_key
         self.service_type = service_type
         self.order = order
@@ -424,6 +442,7 @@ class ServiceMetadata:
             "sid": self.key.sid,
             "name": self.name,
             "group": self.group,
+            "network_type": self.network_type,
             "remote_control_key": self.remote_control_key,
             "service_type": self.service_type,
             "order": self.order,
@@ -437,6 +456,7 @@ class ServiceMetadata:
             ServiceKey(int(data["nid"]), int(data["tsid"]), int(data["sid"])),
             str(data.get("name", "")),
             str(data.get("group", "")),
+            normalize_network_type(data.get("network_type"), int(data["nid"])),
             int(data.get("remote_control_key", 0)),
             int(data.get("service_type", 0)),
             int(data.get("order", 0)),
@@ -515,6 +535,7 @@ class MetadataStore:
                     ServiceKey(int(raw["nid"]), int(raw["tsid"]), int(raw["sid"])),
                     str(raw.get("name", "")).strip(),
                     str(raw.get("group", "")).strip(),
+                    normalize_network_type(raw.get("network_type"), int(raw["nid"])),
                     int(raw.get("remote_control_key", 0)),
                     int(raw.get("service_type", 0)),
                     int(raw.get("order", len(validated))),
@@ -600,6 +621,7 @@ class GuideCache:
                 "name": str(current.key),
                 "etag": current.etag,
                 "event_count": current.event_count,
+                "network_type": normalize_network_type(None, current.key.nid),
                 "events": [],
             }
             metadata = self._metadata.get(current.key)
@@ -608,6 +630,7 @@ class GuideCache:
                     {
                         "name": metadata.name,
                         "group": metadata.group,
+                        "network_type": metadata.network_type,
                         "remote_control_key": metadata.remote_control_key,
                         "service_type": metadata.service_type,
                         "order": metadata.order,

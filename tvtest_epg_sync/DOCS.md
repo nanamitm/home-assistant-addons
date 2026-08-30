@@ -27,6 +27,7 @@ The add-on opens on a program guide built from the EPG already held by the
 sync store. It provides:
 
 - service columns and a vertical time axis starting at 04:00;
+- instant filtering between terrestrial, BS, CS and other services;
 - event blocks sized by their broadcast duration and coloured by genre;
 - a shared variable-height timeline that keeps even short events readable;
 - day navigation, zoom levels and a current-time marker;
@@ -36,9 +37,11 @@ sync store. It provides:
 Use the **Sync status** tab to see the storage and client information that was
 shown by earlier versions of the add-on.
 
-An updated TVTest sends its enabled channel names and order when EPG sharing
-starts. Data received from an older TVTest remains fully usable, but the guide
-shows `NID/TSID/SID` in place of the channel name until metadata arrives.
+An updated TVTest sends its enabled channel names, order and broadcast network
+type when EPG sharing starts. Data received from an older TVTest remains fully
+usable; known Japanese BS/CS network IDs are classified automatically, while
+the guide shows `NID/TSID/SID` in place of the channel name until metadata
+arrives.
 
 ## Options
 
