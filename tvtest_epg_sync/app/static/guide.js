@@ -4,6 +4,7 @@
   var base = window.EPGSYNC_BASE || "";
   var dateInput = document.getElementById("guide-date");
   var networkFilter = document.getElementById("network-filter");
+  var serviceFilter = document.getElementById("service-filter");
   var viewport = document.getElementById("program-viewport");
   var canvas = document.getElementById("program-canvas");
   var headers = document.getElementById("channel-headers");
@@ -95,10 +96,12 @@
       return;
     }
 
-    var services = window.EpgSyncGuideLayout.filterServices(allServices, networkFilter.value);
+    var services = window.EpgSyncGuideLayout.filterServices(
+      allServices, networkFilter.value, serviceFilter.value === "all"
+    );
     if (!services.length) {
       lastTimeline = null;
-      showMessage("この放送波には表示できるサービスがありません。");
+      showMessage("この条件で表示できるサービスがありません。");
       summary.textContent = "0サービス（全" + allServices.length + "）";
       return;
     }
@@ -300,9 +303,11 @@
     document.documentElement.style.setProperty("--minute-height", minuteHeight + "px");
     if (lastGuide) renderGuide(lastGuide);
   });
-  networkFilter.addEventListener("change", function () {
-    viewport.scrollLeft = 0;
-    if (lastGuide) renderGuide(lastGuide);
+  [networkFilter, serviceFilter].forEach(function (filter) {
+    filter.addEventListener("change", function () {
+      viewport.scrollLeft = 0;
+      if (lastGuide) renderGuide(lastGuide);
+    });
   });
   viewport.addEventListener("scroll", function () {
     headers.style.transform = "translateX(" + (-viewport.scrollLeft) + "px)";

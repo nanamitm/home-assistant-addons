@@ -28,6 +28,7 @@ sync store. It provides:
 
 - service columns and a vertical time axis starting at 04:00;
 - instant filtering between terrestrial, BS, CS and other services;
+- a **Services** filter that shows only the main services by default;
 - event blocks sized by their broadcast duration and coloured by genre;
 - a shared variable-height timeline that keeps even short events readable;
 - day navigation, zoom levels and a current-time marker;
@@ -37,11 +38,19 @@ sync store. It provides:
 Use the **Sync status** tab to see the storage and client information that was
 shown by earlier versions of the add-on.
 
-An updated TVTest sends its enabled channel names, order and broadcast network
-type when EPG sharing starts. Data received from an older TVTest remains fully
+The **Services** filter defaults to **Main only**, which leaves out one-seg
+and data broadcast services (ARIB service type `0xC0`), services whose name had
+to be guessed, and sub channels that carry the same name as an earlier service
+on the same transport stream. Choose **All** to list every service the store
+holds.
+
+An updated TVTest sends its channel names, order and broadcast network type
+when EPG sharing starts. Data received from an older TVTest remains fully
 usable; known Japanese BS/CS network IDs are classified automatically, while
 the guide shows `NID/TSID/SID` in place of the channel name until metadata
-arrives.
+arrives. Services that are absent from every TVTest channel list borrow the
+name of the base service on their transport stream, followed by a sub-channel
+number or their service ID.
 
 Advanced BS (`NID 0x000B`) is grouped under BS. SKY PerfecTV! Premium
 (`NID 0x000A`) is grouped under **Other**, separately from the 110-degree CS

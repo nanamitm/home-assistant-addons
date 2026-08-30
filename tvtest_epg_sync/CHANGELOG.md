@@ -1,3 +1,11 @@
+## 1.1.4
+
+- Show only the main services by default, hiding one-seg, data broadcast and
+  sub channels that repeat the name of the service beside them. Switch the new
+  **Services** filter to **All** to see every service again.
+- Name services that never reach a TVTest channel list, such as data broadcast
+  services, after the base service on their transport stream.
+
 ## 1.1.3
 
 - Classify Advanced BS network ID `0x000B` as BS so 4K/8K services no longer

@@ -42,10 +42,28 @@
       + (cumulativePixels[whole + 1] - cumulativePixels[whole]) * (position - whole);
   }
 
-  function filterServices(services, networkType) {
-    if (!networkType || networkType === "all") return (services || []).slice();
+  // ARIB のサービス形式。デジタルTVとデジタル音声だけを主要サービスとみなす。
+  var MAIN_SERVICE_TYPES = [0x01, 0x02];
+
+  function isMainService(service, seenNames) {
+    // 局名が推測のものはデータ放送などなので主要サービスにしない。
+    if (service.name_fallback) return false;
+    // 局名が届いていれば形式で判定する。ワンセグとデータ放送は 0xC0。
+    if (typeof service.service_type === "number"
+        && MAIN_SERVICE_TYPES.indexOf(service.service_type) < 0) return false;
+    // 同じTSに同名のサービスが並ぶのは同時放送のサブチャンネル。最初だけ残す。
+    var key = service.nid + "/" + service.tsid + "/" + service.name;
+    if (seenNames[key]) return false;
+    seenNames[key] = true;
+    return true;
+  }
+
+  function filterServices(services, networkType, includeAllServices) {
+    var seenNames = {};
     return (services || []).filter(function (service) {
-      return service.network_type === networkType;
+      if (networkType && networkType !== "all" && service.network_type !== networkType) return false;
+      if (includeAllServices) return true;
+      return isMainService(service, seenNames);
     });
   }
 

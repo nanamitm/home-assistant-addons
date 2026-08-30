@@ -44,3 +44,31 @@ test('filters services by broadcast network without changing their order', () =>
   assert.deepEqual(filterServices(services, 'terrestrial').map(item => item.name), ['地デジ1', '地デジ2'])
   assert.deepEqual(filterServices(services, 'all'), services)
 })
+
+test('hides one-seg, data and duplicated sub services unless asked for them', () => {
+  const services = [
+    { name: '琉球朝日放送', nid: 0x7c14, tsid: 0x7c14, sid: 0xf820, service_type: 1 },
+    { name: '琉球朝日放送', nid: 0x7c14, tsid: 0x7c14, sid: 0xf821, service_type: 1 },
+    { name: 'ＮＨＫＥテレ２沖縄', nid: 0x7c11, tsid: 0x7c11, sid: 0xf809, service_type: 1 },
+    { name: 'ＯＴＶワンセグ', nid: 0x7c17, tsid: 0x7c17, sid: 0xf9b8, service_type: 192 },
+    { name: 'ＮＨＫ　ＢＳ (02BC)', nid: 4, tsid: 0x40f1, sid: 0x2bc, name_fallback: true },
+  ]
+  assert.deepEqual(
+    filterServices(services, 'all').map(item => item.sid),
+    [0xf820, 0xf809]
+  )
+  assert.equal(filterServices(services, 'all', true).length, 5)
+})
+
+test('applies the broadcast network and service filters together', () => {
+  const services = [
+    { name: '地デジ1', network_type: 'terrestrial', service_type: 1 },
+    { name: '地デジ1ワンセグ', network_type: 'terrestrial', service_type: 192 },
+    { name: 'BS1', network_type: 'bs', service_type: 1 },
+  ]
+  assert.deepEqual(filterServices(services, 'terrestrial').map(item => item.name), ['地デジ1'])
+  assert.deepEqual(
+    filterServices(services, 'terrestrial', true).map(item => item.name),
+    ['地デジ1', '地デジ1ワンセグ']
+  )
+})

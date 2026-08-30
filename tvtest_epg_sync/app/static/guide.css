@@ -53,7 +53,7 @@ h1 { margin: 0; font-size: 1.2rem; }
   display: flex; align-items: center; flex-wrap: wrap; gap: .45rem; padding: .7rem 1rem;
   background: var(--panel); border-bottom: 1px solid var(--border);
 }
-.zoom, .network-filter { display: flex; align-items: center; gap: .35rem; color: var(--muted); font-size: .9rem; }
+.zoom, .network-filter, .service-filter { display: flex; align-items: center; gap: .35rem; color: var(--muted); font-size: .9rem; }
 .summary { margin-left: auto; color: var(--muted); font-size: .85rem; }
 .message { margin: 1rem; padding: 1rem; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
 
