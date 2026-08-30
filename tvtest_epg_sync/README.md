@@ -14,12 +14,13 @@ TVTest EPG Sync provides:
 - update notices over Server-Sent Events, so instances apply changes live;
 - ETag-guarded writes, so two instances updating the same service cannot lose
   each other's work;
-- an Ingress status page showing what is held and which instance sent it.
+- a TVTest-style web program guide, updated live over Ingress;
+- an Ingress status tab showing what is held and which instance sent it.
 
-The add-on never parses event information. It keeps the bytes TVTest sends and
-reads only the 32-byte header to tell services apart and compare versions, so it
-needs no knowledge of ARIB encoding and works regardless of how the sending
-platform represents text.
+The synchronization store keeps the bytes TVTest sends as its authoritative
+copy and reads only the 32-byte header when comparing versions. The web guide
+decodes that same portable `EPG-SVC1` data into display-only fields such as
+titles, times, descriptions and genres; it never rewrites the stored data.
 
 Requires a TVTest build with EPG sharing support. See [DOCS.md](DOCS.md) for
 setup.

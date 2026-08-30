@@ -244,7 +244,14 @@ class ServerTestCase(ServerFixture):
         self.put(make_blob(version=4242))
         os.remove(os.path.join(self.data_dir, "index.json"))
 
-        # 索引が壊れていても blob から復旧できる
+        # 索引が失われても blob から復旧できる
+        reopened = server.Store(self.data_dir)
+        entries = reopened.list_entries()
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0].version, 4242)
+
+    def test_index_rebuild_from_corrupt_file(self):
+        self.put(make_blob(version=4242))
         with open(os.path.join(self.data_dir, "index.json"), "w") as f:
             f.write("{ broken json")
 

@@ -21,6 +21,24 @@
 Settings take effect when the dialog is closed; TVTest does not need
 restarting.
 
+## Web program guide
+
+The add-on opens on a program guide built from the EPG already held by the
+sync store. It provides:
+
+- service columns and a vertical time axis starting at 04:00;
+- event blocks sized by their broadcast duration and coloured by genre;
+- day navigation, zoom levels and a current-time marker;
+- event details including extended text, video and audio information;
+- live refresh when a TVTest instance uploads a service.
+
+Use the **Sync status** tab to see the storage and client information that was
+shown by earlier versions of the add-on.
+
+An updated TVTest sends its enabled channel names and order when EPG sharing
+starts. Data received from an older TVTest remains fully usable, but the guide
+shows `NID/TSID/SID` in place of the channel name until metadata arrives.
+
 ## Options
 
 | Option | Default | Description |
@@ -53,8 +71,9 @@ and needs no port of its own.
 ## Storage
 
 Services are written under `/data/epg`, one file per service plus an index,
-and are included in Home Assistant backups. A full Japanese terrestrial, BS and
-CS lineup is roughly 7 MB. If the index is lost it is rebuilt from the files.
+and are included in Home Assistant backups. Channel names and ordering are kept
+in `/data/epg/metadata.json`. A full Japanese terrestrial, BS and CS lineup is
+roughly 7 MB. If the index is lost it is rebuilt from the files.
 
 ## Troubleshooting
 

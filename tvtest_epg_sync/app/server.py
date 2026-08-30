@@ -186,7 +186,8 @@ class Store:
             with open(self._index_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
         except FileNotFoundError:
-            LOG.info("索引がありません。新規に作成します。")
+            LOG.info("索引がありません。保存ファイルから再構築します。")
+            self._rebuild_index()
             return
         except (OSError, ValueError) as e:
             LOG.warning("索引を読めませんでした (%s)。再構築します。", e)

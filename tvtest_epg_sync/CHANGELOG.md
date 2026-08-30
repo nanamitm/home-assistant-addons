@@ -1,3 +1,12 @@
+## 1.1.0
+
+- Add a TVTest-style web program guide with day navigation, genre colours,
+  event details, zoom controls and live updates.
+- Decode the portable service blobs into a cached, read-only guide API while
+  keeping the original bytes authoritative for synchronization.
+- Accept and persist channel names and ordering uploaded by updated TVTest
+  clients.
+
 ## 1.0.0
 
 Initial release.
