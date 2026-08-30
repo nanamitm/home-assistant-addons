@@ -28,6 +28,7 @@ sync store. It provides:
 
 - service columns and a vertical time axis starting at 04:00;
 - event blocks sized by their broadcast duration and coloured by genre;
+- a shared variable-height timeline that keeps even short events readable;
 - day navigation, zoom levels and a current-time marker;
 - event details including extended text, video and audio information;
 - live refresh when a TVTest instance uploads a service.

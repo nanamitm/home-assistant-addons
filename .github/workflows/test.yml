@@ -21,9 +21,13 @@ jobs:
         run: dotnet test jk_epg/tests/JkEpg.Tests.csproj --configuration Release
       - name: Test JK EPG web UI logic
         run: node --test jk_epg/tests/ui-core.test.js
+      - name: Test TVTest EPG Sync guide layout
+        run: node --test tvtest_epg_sync/tests/guide-layout.test.js
       - run: node --check jk_epg/app/wwwroot/app.js
       - run: node --check jk_epg/app/wwwroot/ui-core.js
       - run: node --check xgps/app/static/app.js
+      - run: node --check tvtest_epg_sync/app/static/guide-layout.js
+      - run: node --check tvtest_epg_sync/app/static/guide.js
       - name: Validate add-on configuration
         run: |
           python - <<'PY'

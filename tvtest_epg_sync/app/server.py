@@ -717,7 +717,7 @@ class Context:
 
 SERVICE_PATH_RE = re.compile(r"^/api/service/(\d+)/(\d+)/(\d+)$")
 GUIDE_EVENT_PATH_RE = re.compile(r"^/api/guide/event/(\d+)/(\d+)/(\d+)/(\d+)$")
-STATIC_PATH_RE = re.compile(r"^/static/(guide\.(?:css|js))$")
+STATIC_PATH_RE = re.compile(r"^/static/(guide(?:-layout)?\.js|guide\.css)$")
 
 
 def parse_guide_range(query: str) -> tuple[datetime, datetime]:

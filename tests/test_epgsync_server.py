@@ -445,6 +445,7 @@ class ServerTestCase(ServerFixture):
         self.assertIn("番組表", html)
         self.assertIn("同期状態", html)
         self.assertIn('/static/guide.css', html)
+        self.assertIn('/static/guide-layout.js', html)
         self.assertIn('/static/guide.js', html)
 
     def test_static_guide_assets(self):
@@ -458,6 +459,11 @@ class ServerTestCase(ServerFixture):
         self.assertIn("text/javascript", headers["Content-Type"])
         self.assertIn(b"EventSource", body)
         self.assertIn(b"/api/events?ui=1", body)
+
+        status, headers, body = self.request("GET", "/static/guide-layout.js", token=None)
+        self.assertEqual(status, 200)
+        self.assertIn("text/javascript", headers["Content-Type"])
+        self.assertIn(b"variableTimeline", body)
 
     def test_fallback_status_page(self):
         self.put(make_blob())

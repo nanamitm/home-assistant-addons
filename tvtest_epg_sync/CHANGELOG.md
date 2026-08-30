@@ -1,3 +1,9 @@
+## 1.1.1
+
+- Align program text to the top of each card.
+- Expand timeline intervals containing short programs so every program keeps at
+  least one readable title row without breaking alignment across services.
+
 ## 1.1.0
 
 - Add a TVTest-style web program guide with day navigation, genre colours,

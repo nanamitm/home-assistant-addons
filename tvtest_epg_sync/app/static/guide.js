@@ -15,8 +15,10 @@
   var detail = document.getElementById("event-detail");
   var refreshTimer = null;
   var lastGuide = null;
+  var lastTimeline = null;
   var minuteHeight = 2;
   var columnWidth = 190;
+  var minimumEventHeight = 36;
 
   function api(path) { return base + path; }
   function pad(value) { return ("000" + Number(value).toString(16).toUpperCase()).slice(-4); }
@@ -86,6 +88,7 @@
 
     var services = data.services || [];
     if (!services.length) {
+      lastTimeline = null;
       showMessage("まだEPGを受信していません。TVTestからEPGが届くとここに表示されます。");
       summary.textContent = "0サービス";
       return;
@@ -95,9 +98,14 @@
     message.hidden = true;
     var first = new Date(data.from);
     var last = new Date(data.to);
-    var totalMinutes = Math.round((last - first) / 60000);
+    var timeline = window.EpgSyncGuideLayout.variableTimeline(
+      services, first.getTime(), last.getTime(), minuteHeight, minimumEventHeight
+    );
+    var totalMinutes = timeline.totalMinutes;
+    var cumulativePixels = timeline.cumulativePixels;
+    lastTimeline = timeline;
     var canvasWidth = services.length * columnWidth;
-    var canvasHeight = totalMinutes * minuteHeight;
+    var canvasHeight = cumulativePixels[totalMinutes];
     headers.style.width = canvasWidth + "px";
     timeAxis.style.height = canvasHeight + "px";
     canvas.style.width = canvasWidth + "px";
@@ -106,8 +114,15 @@
     for (var minute = 0; minute <= totalMinutes; minute += 60) {
       var labelTime = new Date(first.getTime() + minute * 60000);
       var label = node("div", "time-label", formatTime(labelTime));
-      label.style.top = minute * minuteHeight + "px";
+      label.style.top = cumulativePixels[minute] + "px";
       timeAxis.appendChild(label);
+    }
+
+    for (var gridMinute = 0; gridMinute <= totalMinutes; gridMinute += 30) {
+      var gridLine = node("div", "time-grid-line" + (gridMinute % 60 === 0 ? " hour" : ""));
+      gridLine.style.top = cumulativePixels[gridMinute] + "px";
+      gridLine.style.width = canvasWidth + "px";
+      canvas.appendChild(gridLine);
     }
 
     var eventTotal = 0;
@@ -131,15 +146,18 @@
         eventTotal += 1;
         var start = new Date(event.start);
         var end = new Date(event.end);
-        var top = Math.max(0, (start - first) / 60000) * minuteHeight;
-        var bottom = Math.min(totalMinutes, (end - first) / 60000) * minuteHeight;
+        var startMinute = Math.max(0, (start - first) / 60000);
+        var endMinute = Math.min(totalMinutes, (end - first) / 60000);
+        var top = window.EpgSyncGuideLayout.pixelAt(cumulativePixels, startMinute);
+        var bottom = window.EpgSyncGuideLayout.pixelAt(cumulativePixels, endMinute);
+        if (bottom <= top) return;
         var genre = event.genres && event.genres.length ? event.genres[0][0] : null;
         var card = node("button", "event-card genre-" + (genre === null ? "none" : genre));
         card.type = "button";
         card.style.left = "2px";
         card.style.top = top + "px";
         card.style.width = columnWidth - 4 + "px";
-        card.style.height = Math.max(22, bottom - top - 2) + "px";
+        card.style.height = Math.max(2, bottom - top - 2) + "px";
         card.appendChild(node("div", "event-time", formatTime(event.start)));
         card.appendChild(node("div", "event-title", event.title || "（番組名なし）"));
         if (bottom - top > 66 && event.text) card.appendChild(node("div", "event-text", event.text));
@@ -151,7 +169,9 @@
     var now = new Date();
     if (now >= first && now < last) {
       var line = node("div", "now-line");
-      line.style.top = ((now - first) / 60000) * minuteHeight + "px";
+      line.style.top = window.EpgSyncGuideLayout.pixelAt(
+        cumulativePixels, (now - first) / 60000
+      ) + "px";
       line.style.width = canvasWidth + "px";
       canvas.appendChild(line);
     }
@@ -243,7 +263,7 @@
   }
 
   function scrollToNow() {
-    if (!lastGuide) return;
+    if (!lastGuide || !lastTimeline) return;
     var first = new Date(lastGuide.from);
     var last = new Date(lastGuide.to);
     var now = new Date();
@@ -252,7 +272,9 @@
       loadGuide(false);
       return;
     }
-    viewport.scrollTop = Math.max(0, ((now - first) / 60000) * minuteHeight - viewport.clientHeight / 3);
+    viewport.scrollTop = Math.max(0, window.EpgSyncGuideLayout.pixelAt(
+      lastTimeline.cumulativePixels, (now - first) / 60000
+    ) - viewport.clientHeight / 3);
   }
 
   document.querySelectorAll(".tab").forEach(function (tab) {
