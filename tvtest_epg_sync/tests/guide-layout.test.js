@@ -1,6 +1,8 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { variableTimeline, pixelAt, filterServices } = require('../app/static/guide-layout.js')
+const {
+  variableTimeline, pixelAt, filterServices, matchesGenres, GENRES, OTHER_GENRE,
+} = require('../app/static/guide-layout.js')
 
 const start = Date.parse('2026-08-30T04:00:00+09:00')
 const end = start + 60 * 60000
@@ -83,4 +85,32 @@ test('applies the broadcast network and service filters together', () => {
     filterServices(services, 'terrestrial', true).map(item => item.name),
     ['地デジ1', '地デジ1ワンセグ']
   )
+})
+
+test('keeps every program when no genre is chosen', () => {
+  const drama = { genres: [[3, 0]] }
+  assert.equal(matchesGenres(drama, []), true)
+  assert.equal(matchesGenres(drama, undefined), true)
+})
+
+test('matches a program on any of its genres', () => {
+  // 映画ジャンルのアニメは大分類を二つ持つ。どちらで絞っても出したい。
+  const animatedFilm = { genres: [[6, 2], [7, 0]] }
+  assert.equal(matchesGenres(animatedFilm, [6]), true)
+  assert.equal(matchesGenres(animatedFilm, [7]), true)
+  assert.equal(matchesGenres(animatedFilm, [1, 7]), true)
+  assert.equal(matchesGenres(animatedFilm, [1]), false)
+})
+
+test('treats reserved genres and missing genres as other', () => {
+  assert.equal(matchesGenres({ genres: [[14, 1]] }, [OTHER_GENRE]), true)
+  assert.equal(matchesGenres({ genres: [] }, [OTHER_GENRE]), true)
+  assert.equal(matchesGenres({}, [OTHER_GENRE]), true)
+  assert.equal(matchesGenres({ genres: [] }, [3]), false)
+})
+
+test('offers one chip per genre up to the other bucket', () => {
+  assert.equal(GENRES.length, OTHER_GENRE + 1)
+  assert.deepEqual(GENRES.map(item => item.value), [...Array(OTHER_GENRE + 1).keys()])
+  assert.ok(GENRES.every(item => item.label))
 })

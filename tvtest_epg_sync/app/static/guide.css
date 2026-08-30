@@ -55,10 +55,27 @@ h1 { margin: 0; font-size: 1.2rem; }
 }
 .zoom, .network-filter, .service-filter { display: flex; align-items: center; gap: .35rem; color: var(--muted); font-size: .9rem; }
 .summary { margin-left: auto; color: var(--muted); font-size: .85rem; }
+
+.genre-bar {
+  display: flex; align-items: center; flex-wrap: wrap; gap: .3rem;
+  padding: 0 1rem .7rem; background: var(--panel); border-bottom: 1px solid var(--border);
+}
+#genre-chips { display: contents; }
+.genre-label { color: var(--muted); font-size: .9rem; margin-right: .15rem; }
+.genre-chip {
+  padding: .3rem .6rem; font-size: .82rem; border-radius: 6px; color: #23272e;
+  border: 1px solid transparent;
+}
+.genre-chip:not(.active) { opacity: .55; }
+.genre-chip.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+#genre-all { background: var(--panel-2); color: inherit; }
+/* 選んだジャンル以外の番組。読めなくはしないが、目に入らない程度まで沈める。 */
+.event-card.dimmed { opacity: .22; filter: saturate(.2); }
+.event-card.dimmed:hover, .event-card.dimmed:focus { opacity: 1; filter: none; }
 .message { margin: 1rem; padding: 1rem; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
 
 .guide-grid {
-  height: calc(100vh - 145px); min-height: 420px;
+  height: calc(100vh - 187px); min-height: 420px;
   display: grid; grid-template-columns: var(--time-width) minmax(0, 1fr);
   grid-template-rows: var(--header-height) minmax(0, 1fr);
   background: var(--panel); border-top: 1px solid var(--border);

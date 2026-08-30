@@ -30,6 +30,7 @@ sync store. It provides:
 - instant filtering between terrestrial, BS, CS and other services;
 - a **Services** filter that shows only the main services by default;
 - the channel logo in front of each station name, where one has arrived;
+- a genre filter that fades out the programs it does not match;
 - event blocks sized by their broadcast duration and coloured by genre;
 - a shared variable-height timeline that keeps even short events readable;
 - day navigation, zoom levels and a current-time marker;
@@ -49,6 +50,13 @@ are linked to another service on the same transport stream by the EIT event
 sharing descriptor. Names cannot be used for this: BS Nittele and BS-TBS give
 their sub channels exactly the same name as the base service, yet some of them
 carry their own programs.
+
+The genre buttons filter on the ARIB level 1 genre. Pick as many as you like and
+a program is kept when it carries any of them, so a film that is also an
+animation answers to either. Programs that do not match stay in place but fade
+into the background, which keeps the surrounding schedule readable while the
+matches stand out; hovering one brings it back to full strength. Reserved
+genres and programs with no genre at all are gathered under **Other**.
 
 ## Channel logos
 
@@ -115,8 +123,10 @@ and needs no port of its own.
 
 Services are written under `/data/epg`, one file per service plus an index,
 and are included in Home Assistant backups. Channel names and ordering are kept
-in `/data/epg/metadata.json`. A full Japanese terrestrial, BS and CS lineup is
-roughly 7 MB. If the index is lost it is rebuilt from the files.
+in `/data/epg/metadata.json`, channel logos under `/data/epg/logos` with their
+own index. A full Japanese terrestrial, BS and CS lineup is roughly 7 MB, and
+its logos add well under 100 KB. If the index is lost it is rebuilt from the
+files.
 
 ## Troubleshooting
 

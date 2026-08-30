@@ -42,6 +42,38 @@
       + (cumulativePixels[whole + 1] - cumulativePixels[whole]) * (position - whole);
   }
 
+  // ARIB のジャンル大分類。12 以降は予備・拡張なので「その他」にまとめ、
+  // ジャンルを持たない番組もそこへ入れる。
+  var OTHER_GENRE = 12;
+  var GENRES = [
+    { value: 0, label: "ニュース" },
+    { value: 1, label: "スポーツ" },
+    { value: 2, label: "情報" },
+    { value: 3, label: "ドラマ" },
+    { value: 4, label: "音楽" },
+    { value: 5, label: "バラエティ" },
+    { value: 6, label: "映画" },
+    { value: 7, label: "アニメ" },
+    { value: 8, label: "ドキュメンタリー" },
+    { value: 9, label: "劇場" },
+    { value: 10, label: "趣味" },
+    { value: 11, label: "福祉" },
+    { value: OTHER_GENRE, label: "その他" }
+  ];
+
+  function matchesGenres(event, selected) {
+    if (!selected || !selected.length) return true;
+    var genres = (event && event.genres) || [];
+    if (!genres.length) return selected.indexOf(OTHER_GENRE) >= 0;
+    for (var i = 0; i < genres.length; i += 1) {
+      var level1 = genres[i][0];
+      if (typeof level1 !== "number") continue;
+      if (level1 > OTHER_GENRE) level1 = OTHER_GENRE;
+      if (selected.indexOf(level1) >= 0) return true;
+    }
+    return false;
+  }
+
   // ARIB のサービス形式。デジタルTVとデジタル音声だけを主要サービスとみなす。
   var MAIN_SERVICE_TYPES = [0x01, 0x02];
 
@@ -67,6 +99,9 @@
   return {
     variableTimeline: variableTimeline,
     pixelAt: pixelAt,
-    filterServices: filterServices
+    filterServices: filterServices,
+    GENRES: GENRES,
+    OTHER_GENRE: OTHER_GENRE,
+    matchesGenres: matchesGenres
   };
 }));

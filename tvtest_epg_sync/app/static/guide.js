@@ -5,6 +5,9 @@
   var dateInput = document.getElementById("guide-date");
   var networkFilter = document.getElementById("network-filter");
   var serviceFilter = document.getElementById("service-filter");
+  var genreChips = document.getElementById("genre-chips");
+  var genreAll = document.getElementById("genre-all");
+  var selectedGenres = [];
   var viewport = document.getElementById("program-viewport");
   var canvas = document.getElementById("program-canvas");
   var headers = document.getElementById("channel-headers");
@@ -39,6 +42,31 @@
     if (className) element.className = className;
     if (text !== undefined) element.textContent = text;
     return element;
+  }
+
+  function buildGenreChips() {
+    window.EpgSyncGuideLayout.GENRES.forEach(function (genre) {
+      var chip = node("button", "genre-chip genre-" + genre.value, genre.label);
+      chip.type = "button";
+      chip.setAttribute("aria-pressed", "false");
+      chip.addEventListener("click", function () {
+        var at = selectedGenres.indexOf(genre.value);
+        if (at < 0) selectedGenres.push(genre.value); else selectedGenres.splice(at, 1);
+        syncGenreChips();
+        if (lastGuide) renderGuide(lastGuide);
+      });
+      genreChips.appendChild(chip);
+    });
+  }
+
+  function syncGenreChips() {
+    genreAll.classList.toggle("active", selectedGenres.length === 0);
+    genreAll.setAttribute("aria-pressed", selectedGenres.length === 0 ? "true" : "false");
+    Array.prototype.forEach.call(genreChips.children, function (chip, index) {
+      var on = selectedGenres.indexOf(window.EpgSyncGuideLayout.GENRES[index].value) >= 0;
+      chip.classList.toggle("active", on);
+      chip.setAttribute("aria-pressed", on ? "true" : "false");
+    });
   }
 
   function setView(name) {
@@ -138,6 +166,7 @@
     }
 
     var eventTotal = 0;
+    var genreTotal = 0;
     services.forEach(function (service, index) {
       var header = node("div", "channel-header");
       if (service.logo) {
@@ -177,6 +206,9 @@
         var genre = event.genres && event.genres.length ? event.genres[0][0] : null;
         var card = node("button", "event-card genre-" + (genre === null ? "none" : genre));
         card.type = "button";
+        // 選んだジャンル以外は沈めるだけにして、前後の番組も見えるようにする。
+        if (window.EpgSyncGuideLayout.matchesGenres(event, selectedGenres)) genreTotal += 1;
+        else card.classList.add("dimmed");
         card.style.left = "2px";
         card.style.top = top + "px";
         card.style.width = columnWidth - 4 + "px";
@@ -198,7 +230,8 @@
       line.style.width = canvasWidth + "px";
       canvas.appendChild(line);
     }
-    summary.textContent = services.length + "サービス / " + eventTotal + "番組"
+    summary.textContent = services.length + "サービス / "
+      + (selectedGenres.length ? genreTotal + " / " : "") + eventTotal + "番組"
       + (services.length === allServices.length ? "" : "（全" + allServices.length + "サービス）");
   }
 
@@ -325,6 +358,13 @@
     timeAxis.style.transform = "translateY(" + (-viewport.scrollTop) + "px)";
   });
 
+  buildGenreChips();
+  genreAll.addEventListener("click", function () {
+    if (!selectedGenres.length) return;
+    selectedGenres = [];
+    syncGenreChips();
+    if (lastGuide) renderGuide(lastGuide);
+  });
   dateInput.value = localDate(new Date());
   columnWidth = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--column-width")) || 190;
   loadGuide(false);

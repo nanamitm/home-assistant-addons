@@ -1,3 +1,9 @@
+## 1.3.0
+
+- Add a genre filter to the program guide. Pick any number of genres and the
+  programs that do not match fade into the background, so the ones that do
+  stand out without losing the shape of the schedule around them.
+
 ## 1.2.0
 
 - Show the channel logo in front of each station name in the program guide.
