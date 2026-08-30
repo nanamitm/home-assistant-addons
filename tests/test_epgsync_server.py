@@ -579,6 +579,33 @@ class ServerTestCase(ServerFixture):
         self.assertEqual(services[0]["network_type"], "terrestrial")
         self.assertEqual(services[0]["remote_control_key"], 2)
 
+    def test_guide_names_services_without_metadata(self):
+        self.put(service_blob(event_blob(name="本局"), sid=0xE4))
+        self.put(service_blob(event_blob(name="サブ"), sid=0xE5))
+        self.put(service_blob(event_blob(name="データ"), sid=0x2BC))
+        metadata = {"services": [{
+            "nid": 4, "tsid": 0x4010, "sid": 0xE4,
+            "name": "総合テレビ", "network_type": "terrestrial",
+            "remote_control_key": 1, "service_type": 1, "order": 10,
+        }]}
+        status, _, _ = self.request(
+            "PUT", "/api/service-metadata",
+            data=json.dumps(metadata, ensure_ascii=False).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(status, 200)
+
+        status, _, body = self.request("GET", "/api/guide?date=2026-08-29")
+        self.assertEqual(status, 200)
+        by_sid = {item["sid"]: item for item in json.loads(body)["services"]}
+        self.assertEqual(by_sid[0xE4]["name"], "総合テレビ")
+        self.assertNotIn("name_fallback", by_sid[0xE4])
+        # 直後の SID は枝番、離れた SID は SID をそのまま添える。
+        self.assertEqual(by_sid[0xE5]["name"], "総合テレビ 2")
+        self.assertTrue(by_sid[0xE5]["name_fallback"])
+        self.assertEqual(by_sid[0x2BC]["name"], "総合テレビ (02BC)")
+        self.assertTrue(by_sid[0x2BC]["name_fallback"])
+
     def test_service_metadata_requires_token_and_valid_data(self):
         payload = json.dumps({"services": []}).encode("utf-8")
         status, _, _ = self.request(
