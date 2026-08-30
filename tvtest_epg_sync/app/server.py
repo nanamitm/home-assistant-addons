@@ -175,6 +175,10 @@ class Store:
         os.makedirs(self._blob_dir, exist_ok=True)
         self._load_index()
 
+    @property
+    def data_dir(self) -> str:
+        return self._dir
+
     # -- 索引 --------------------------------------------------------------
 
     def _load_index(self) -> None:
@@ -386,11 +390,164 @@ class EventBus:
                 LOG.debug("SSE の購読者が滞留しています。")
 
 
+class ServiceMetadata:
+    __slots__ = (
+        "key", "name", "group", "remote_control_key", "service_type",
+        "order", "source", "updated_at",
+    )
+
+    def __init__(
+        self,
+        key: ServiceKey,
+        name: str,
+        group: str,
+        remote_control_key: int,
+        service_type: int,
+        order: int,
+        source: str,
+        updated_at: str,
+    ) -> None:
+        self.key = key
+        self.name = name
+        self.group = group
+        self.remote_control_key = remote_control_key
+        self.service_type = service_type
+        self.order = order
+        self.source = source
+        self.updated_at = updated_at
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "nid": self.key.nid,
+            "tsid": self.key.tsid,
+            "sid": self.key.sid,
+            "name": self.name,
+            "group": self.group,
+            "remote_control_key": self.remote_control_key,
+            "service_type": self.service_type,
+            "order": self.order,
+            "source": self.source,
+            "updated_at": self.updated_at,
+        }
+
+    @classmethod
+    def from_json(cls, data: dict[str, Any]) -> "ServiceMetadata":
+        return cls(
+            ServiceKey(int(data["nid"]), int(data["tsid"]), int(data["sid"])),
+            str(data.get("name", "")),
+            str(data.get("group", "")),
+            int(data.get("remote_control_key", 0)),
+            int(data.get("service_type", 0)),
+            int(data.get("order", 0)),
+            str(data.get("source", "")),
+            str(data.get("updated_at", "")),
+        )
+
+
+class MetadataStore:
+    """TVTest から受け取った局名と番組表上の順序を保管する。"""
+
+    MAX_SERVICES_PER_UPDATE = 10_000
+    MAX_NAME_LENGTH = 128
+    MAX_GROUP_LENGTH = 64
+
+    def __init__(self, data_dir: str) -> None:
+        self._path = os.path.join(data_dir, "metadata.json")
+        self._lock = threading.RLock()
+        self._items: dict[ServiceKey, ServiceMetadata] = {}
+        self._load()
+
+    def _load(self) -> None:
+        try:
+            with open(self._path, "r", encoding="utf-8") as file:
+                data = json.load(file)
+        except FileNotFoundError:
+            return
+        except (OSError, ValueError) as exc:
+            LOG.warning("局メタデータを読めませんでした: %s", exc)
+            return
+
+        for raw in data.get("services", []):
+            try:
+                item = ServiceMetadata.from_json(raw)
+                self._validate(item)
+            except (KeyError, TypeError, ValueError, BlobError):
+                continue
+            self._items[item.key] = item
+
+    def _save(self) -> None:
+        data = {
+            "saved_at": utcnow(),
+            "services": [item.to_json() for item in self._items.values()],
+        }
+        write_atomic(
+            self._path,
+            json.dumps(data, ensure_ascii=False, indent=1).encode("utf-8"),
+        )
+
+    @classmethod
+    def _validate(cls, item: ServiceMetadata) -> None:
+        if not item.name or len(item.name) > cls.MAX_NAME_LENGTH:
+            raise ValueError("局名が空か長すぎます")
+        if len(item.group) > cls.MAX_GROUP_LENGTH:
+            raise ValueError("グループ名が長すぎます")
+        if not 0 <= item.remote_control_key <= 999:
+            raise ValueError("リモコン番号の範囲が不正です")
+        if not 0 <= item.service_type <= 0xFF:
+            raise ValueError("サービスタイプの範囲が不正です")
+        if not 0 <= item.order <= 1_000_000:
+            raise ValueError("表示順の範囲が不正です")
+
+    def update(self, raw_services: Any, source: str) -> int:
+        if not isinstance(raw_services, list):
+            raise ValueError("services は配列で指定してください")
+        if len(raw_services) > self.MAX_SERVICES_PER_UPDATE:
+            raise ValueError("サービス数が多すぎます")
+
+        now = utcnow()
+        validated: list[ServiceMetadata] = []
+        for raw in raw_services:
+            if not isinstance(raw, dict):
+                raise ValueError("サービスの形式が不正です")
+            try:
+                item = ServiceMetadata(
+                    ServiceKey(int(raw["nid"]), int(raw["tsid"]), int(raw["sid"])),
+                    str(raw.get("name", "")).strip(),
+                    str(raw.get("group", "")).strip(),
+                    int(raw.get("remote_control_key", 0)),
+                    int(raw.get("service_type", 0)),
+                    int(raw.get("order", len(validated))),
+                    source,
+                    now,
+                )
+            except (KeyError, TypeError, ValueError, BlobError) as exc:
+                raise ValueError("サービスの項目が不正です") from exc
+            self._validate(item)
+            validated.append(item)
+
+        with self._lock:
+            for item in validated:
+                self._items[item.key] = item
+            if validated:
+                self._save()
+        return len(validated)
+
+    def get(self, key: ServiceKey) -> Optional[ServiceMetadata]:
+        with self._lock:
+            return self._items.get(key)
+
+    def remove(self, key: ServiceKey) -> None:
+        with self._lock:
+            if self._items.pop(key, None) is not None:
+                self._save()
+
+
 class GuideCache:
     """保存 blob を ETag 単位で解析して再利用する。"""
 
-    def __init__(self, store: Store) -> None:
+    def __init__(self, store: Store, metadata: MetadataStore) -> None:
         self._store = store
+        self._metadata = metadata
         self._lock = threading.RLock()
         self._cache: dict[ServiceKey, tuple[str, Optional[epg_parser.EpgService], str]] = {}
 
@@ -428,7 +585,9 @@ class GuideCache:
         parsed_services: list[tuple[Entry, epg_parser.EpgService]] = []
         services: list[dict[str, Any]] = []
 
-        for entry in self._store.list_entries():
+        entries = self._store.list_entries()
+        entries.sort(key=self._sort_key)
+        for entry in entries:
             result = self.get(entry.key)
             if result is None:
                 continue
@@ -442,6 +601,17 @@ class GuideCache:
                 "event_count": current.event_count,
                 "events": [],
             }
+            metadata = self._metadata.get(current.key)
+            if metadata is not None:
+                item.update(
+                    {
+                        "name": metadata.name,
+                        "group": metadata.group,
+                        "remote_control_key": metadata.remote_control_key,
+                        "service_type": metadata.service_type,
+                        "order": metadata.order,
+                    }
+                )
             if parsed is None:
                 item["parse_error"] = error
             else:
@@ -471,6 +641,12 @@ class GuideCache:
             "generated_at": datetime.now(epg_parser.JST).replace(microsecond=0).isoformat(),
             "services": services,
         }
+
+    def _sort_key(self, entry: Entry) -> tuple[Any, ...]:
+        metadata = self._metadata.get(entry.key)
+        if metadata is None:
+            return (1, 0, entry.key.nid, entry.key.tsid, entry.key.sid)
+        return (0, metadata.order, entry.key.nid, entry.key.tsid, entry.key.sid)
 
     def get_event(
         self, key: ServiceKey, event_id: int
@@ -533,7 +709,8 @@ class Context:
         self.store = store
         self.bus = bus
         self.token = token
-        self.guide = GuideCache(store)
+        self.metadata = MetadataStore(store.data_dir)
+        self.guide = GuideCache(store, self.metadata)
         self.started_at = utcnow()
 
 
@@ -747,6 +924,9 @@ class Handler(BaseHTTPRequestHandler):
             if method == "GET" and path == "/api/guide":
                 self._handle_guide(query)
                 return
+            if method == "PUT" and path == "/api/service-metadata":
+                self._handle_put_metadata()
+                return
 
             guide_event = GUIDE_EVENT_PATH_RE.match(path)
             if method == "GET" and guide_event:
@@ -846,6 +1026,25 @@ class Handler(BaseHTTPRequestHandler):
         data.update({"nid": key.nid, "tsid": key.tsid, "sid": key.sid})
         self._send_json(HTTPStatus.OK, {"event": data}, {"ETag": entry.etag})
 
+    def _handle_put_metadata(self) -> None:
+        body = self._read_body()
+        if body is None:
+            return
+        try:
+            payload = json.loads(body.decode("utf-8"))
+            if not isinstance(payload, dict):
+                raise ValueError("本文はオブジェクトで指定してください")
+            count = self.context.metadata.update(
+                payload.get("services"), self._source_name()
+            )
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+            self._send_error_json(HTTPStatus.BAD_REQUEST, str(exc))
+            return
+
+        LOG.info("%s から %d サービスの局情報を受信しました。", self._source_name(), count)
+        self.context.bus.publish({"type": "metadata", "count": count})
+        self._send_json(HTTPStatus.OK, {"result": "stored", "count": count})
+
     def _handle_get_service(self, key: ServiceKey) -> None:
         result = self.context.store.get_blob(key)
         if result is None:
@@ -938,6 +1137,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send_error_json(HTTPStatus.NOT_FOUND, "サービスがありません")
             return
         self.context.guide.invalidate(key)
+        self.context.metadata.remove(key)
         LOG.info("%s を削除しました。", key)
         self.context.bus.publish(
             {"type": "deleted", "nid": key.nid, "tsid": key.tsid, "sid": key.sid}

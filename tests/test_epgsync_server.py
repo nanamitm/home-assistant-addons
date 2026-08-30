@@ -528,6 +528,72 @@ class ServerTestCase(ServerFixture):
         self.assertEqual(service["events"], [])
         self.assertTrue(service["parse_error"])
 
+    # -- 局メタデータ ------------------------------------------------------
+
+    def test_service_metadata_names_and_orders_guide(self):
+        self.put(service_blob(event_blob(name="一局目"), sid=0xE4))
+        self.put(service_blob(event_blob(name="二局目"), sid=0xE5))
+        metadata = {
+            "services": [
+                {
+                    "nid": 4, "tsid": 0x4010, "sid": 0xE4,
+                    "name": "総合テレビ", "group": "地デジ",
+                    "remote_control_key": 1, "service_type": 1, "order": 20,
+                },
+                {
+                    "nid": 4, "tsid": 0x4010, "sid": 0xE5,
+                    "name": "教育テレビ", "group": "地デジ",
+                    "remote_control_key": 2, "service_type": 1, "order": 10,
+                },
+            ]
+        }
+        status, _, body = self.request(
+            "PUT", "/api/service-metadata",
+            data=json.dumps(metadata, ensure_ascii=False).encode("utf-8"),
+            headers={"Content-Type": "application/json", "X-EPG-Source": "living-pc"},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["count"], 2)
+
+        status, _, body = self.request("GET", "/api/guide?date=2026-08-29")
+        self.assertEqual(status, 200)
+        services = json.loads(body)["services"]
+        self.assertEqual([item["name"] for item in services], ["教育テレビ", "総合テレビ"])
+        self.assertEqual(services[0]["group"], "地デジ")
+        self.assertEqual(services[0]["remote_control_key"], 2)
+
+    def test_service_metadata_requires_token_and_valid_data(self):
+        payload = json.dumps({"services": []}).encode("utf-8")
+        status, _, _ = self.request(
+            "PUT", "/api/service-metadata", data=payload, token=None
+        )
+        self.assertEqual(status, 401)
+
+        status, _, body = self.request(
+            "PUT", "/api/service-metadata", data=b'{"services":[{"nid":4}]}'
+        )
+        self.assertEqual(status, 400)
+        self.assertTrue(json.loads(body)["error"])
+
+    def test_service_metadata_survives_restart(self):
+        metadata = {
+            "services": [{
+                "nid": 4, "tsid": 0x4010, "sid": 0xE4,
+                "name": "保存局", "order": 1,
+            }]
+        }
+        status, _, _ = self.request(
+            "PUT", "/api/service-metadata",
+            data=json.dumps(metadata, ensure_ascii=False).encode("utf-8"),
+        )
+        self.assertEqual(status, 200)
+
+        reopened_store = server.Store(self.data_dir)
+        reopened = server.Context(reopened_store, server.EventBus(), token="secret")
+        item = reopened.metadata.get(server.ServiceKey(4, 0x4010, 0xE4))
+        self.assertIsNotNone(item)
+        self.assertEqual(item.name, "保存局")
+
     def test_ui_subscriber_is_not_counted(self):
         ready = threading.Event()
         stop = threading.Event()

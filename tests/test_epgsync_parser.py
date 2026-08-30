@@ -95,15 +95,15 @@ def event_blob(
     return result
 
 
-def service_blob(*events, declared_count=None):
+def service_blob(*events, declared_count=None, nid=4, tsid=0x4010, sid=0xE4):
     if declared_count is None:
         declared_count = len(events)
     header = epg_parser.HEADER_STRUCT.pack(
         epg_parser.HEADER_MAGIC,
         1,
-        4,
-        0x4010,
-        0xE4,
+        nid,
+        tsid,
+        sid,
         0,
         declared_count,
         2000,
