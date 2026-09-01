@@ -1,3 +1,10 @@
+## 1.4.2
+
+- Show the times on the Sync status tab in the time zone of whoever is
+  reading it, rather than the UTC the store keeps them in.
+- Show the capture reports on the Sync status tab itself. They were only on
+  the plain status page for browsers without JavaScript.
+
 ## 1.4.1
 
 - Keep the channel counts a runner reports and show them on the Sync status

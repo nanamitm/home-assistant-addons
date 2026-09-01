@@ -1834,6 +1834,13 @@ def render_status_page(entries: list[Entry], context: Context, prefix: str) -> s
   var pending = null;
 
   function pad(n) {{ return ("000" + n.toString(16).toUpperCase()).slice(-4); }}
+  function local(s) {{
+    var d = new Date(s);
+    return isNaN(d.getTime()) ? s : d.toLocaleString("ja-JP", {{
+      month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit"
+    }});
+  }}
   function esc(s) {{
     return String(s).replace(/[&<>"]/g, function (c) {{
       return {{ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }}[c];
@@ -1851,7 +1858,7 @@ def render_status_page(entries: list[Entry], context: Context, prefix: str) -> s
         + "<td class=id>" + pad(s.nid) + "/" + pad(s.tsid) + "/" + pad(s.sid) + "</td>"
         + "<td class=num>" + s.event_count + "</td>"
         + "<td class=num>" + Math.round(s.size / 1024) + " KB</td>"
-        + "<td>" + esc(s.updated_at) + "</td>"
+        + "<td>" + esc(local(s.updated_at)) + "</td>"
         + "<td>" + esc(s.source || "-") + "</td></tr>";
     }});
 
@@ -1920,7 +1927,7 @@ def render_status_page(entries: list[Entry], context: Context, prefix: str) -> s
           + "</td></tr>";
       }});
       html += "<h3>" + esc(r.name) + (r.host ? " (" + esc(r.host) + ")" : "") + "</h3>"
-        + '<div class="sub">' + esc(r.finished || r.received_at) + "</div>"
+        + '<div class="sub">' + esc(local(r.finished || r.received_at)) + "</div>"
         + (rows
           ? "<table><thead><tr><th>チューナー</th><th>結果</th>"
             + "<th class=num>チャンネル</th><th class=num>所要</th>"
@@ -1978,7 +1985,7 @@ def render_runners(reports: list[dict[str, Any]]) -> str:
         )
         blocks.append(
             "<h3>%s</h3><div class=\"sub\">%s</div>%s"
-            % (title, escape(report["finished"] or report["received_at"]), body)
+            % (title, escape(local_text(report["finished"] or report["received_at"])), body)
         )
     return "".join(blocks)
 
@@ -2004,7 +2011,7 @@ def render_row(e: Entry) -> str:
             sid=e.key.sid,
             count=e.event_count,
             size=f"{e.size / 1024:.0f} KB",
-            updated=escape(e.updated_at),
+            updated=escape(local_text(e.updated_at)),
             source=escape(e.source or "-"),
         )
     )
@@ -2018,6 +2025,22 @@ def render_table(rows: str) -> str:
         "<th class=num>サイズ</th><th>最終更新</th><th>更新元</th></tr></thead>"
         "<tbody>" + rows + "</tbody></table>"
     )
+
+
+def local_text(text: str) -> str:
+    """An ISO time as the machine reading it would write it.
+
+    Everything is stored in UTC; nobody reads a schedule in UTC.
+    """
+    if not text:
+        return "-"
+    try:
+        when = datetime.fromisoformat(text)
+    except ValueError:
+        return text
+    if when.tzinfo is not None:
+        when = when.astimezone()
+    return when.strftime("%m/%d %H:%M:%S")
 
 
 def escape(s: str) -> str:

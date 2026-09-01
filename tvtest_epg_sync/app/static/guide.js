@@ -306,6 +306,17 @@
     detail.appendChild(node("p", "detail-meta", "NID/TSID/SID: " + serviceId(service) + " / Event ID: " + pad(event.event_id)));
   }
 
+  function localTime(text) {
+    // 保管しているのは UTC なので、見るときは端末の時刻に直す
+    if (!text) return "-";
+    var when = new Date(text);
+    if (isNaN(when.getTime())) return text;
+    return when.toLocaleString("ja-JP", {
+      month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit"
+    });
+  }
+
   function loadStatus() {
     fetch(api("/api/services"), { headers: { Accept: "application/json" } })
       .then(function (response) {
@@ -316,6 +327,67 @@
       .catch(function (error) {
         document.getElementById("status-list").replaceChildren(node("div", "empty", "同期状態を取得できません: " + error.message));
       });
+
+    fetch(api("/api/runner-status"), { headers: { Accept: "application/json" } })
+      .then(function (response) {
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        return response.json();
+      })
+      .then(renderRunners)
+      .catch(function (error) {
+        document.getElementById("status-runners").replaceChildren(
+          node("div", "empty", "取得結果を読めません: " + error.message));
+      });
+  }
+
+  function renderRunners(data) {
+    var target = document.getElementById("status-runners");
+    var runners = data.runners || [];
+    if (!runners.length) {
+      target.replaceChildren(node("div", "empty", "まだ取得結果を受け取っていません。"));
+      return;
+    }
+
+    var fragment = document.createDocumentFragment();
+    runners.forEach(function (runner) {
+      fragment.appendChild(node("h3", "runner-name",
+        runner.name + (runner.host ? " (" + runner.host + ")" : "")));
+      fragment.appendChild(node("div", "runner-time",
+        localTime(runner.finished || runner.received_at)));
+
+      var captures = runner.captures || [];
+      if (!captures.length) {
+        fragment.appendChild(node("div", "empty", "取得したチューナーがありません。"));
+        return;
+      }
+
+      var table = node("table");
+      var head = node("thead");
+      var headRow = node("tr");
+      ["チューナー", "結果", "チャンネル", "所要"].forEach(function (text) {
+        headRow.appendChild(node("th", "", text));
+      });
+      head.appendChild(headRow); table.appendChild(head);
+
+      var body = node("tbody");
+      captures.forEach(function (capture) {
+        var channels = "-";
+        if (capture.channels) {
+          channels = (capture.captured != null && capture.captured !== capture.channels)
+            ? capture.captured + "/" + capture.channels : String(capture.channels);
+        }
+        var row = node("tr");
+        row.appendChild(node("td", "", capture.driver || "-"));
+        row.appendChild(node("td", "", capture.result || "-"));
+        row.appendChild(node("td", "num", channels));
+        row.appendChild(node("td", "num",
+          capture.elapsed ? Math.round(capture.elapsed / 60) + " 分" : "-"));
+        body.appendChild(row);
+      });
+      table.appendChild(body);
+      fragment.appendChild(table);
+    });
+    target.replaceChildren(fragment);
   }
 
   function renderStatus(data) {
@@ -348,7 +420,7 @@
       row.appendChild(node("td", "mono", serviceId(service)));
       row.appendChild(node("td", "num", String(service.event_count)));
       row.appendChild(node("td", "num", Math.round(service.size / 1024) + " KB"));
-      row.appendChild(node("td", "", service.updated_at));
+      row.appendChild(node("td", "", localTime(service.updated_at)));
       row.appendChild(node("td", "", service.source || "-"));
       body.appendChild(row);
     });

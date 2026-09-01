@@ -138,6 +138,9 @@ h1 { margin: 0; font-size: 1.2rem; }
 .status-value { font-size: 1.45rem; font-weight: 700; }
 .status-label { color: var(--muted); font-size: .78rem; }
 .status-list { padding: 0 1rem 1rem; overflow-x: auto; }
+.status-heading { margin: .5rem 1rem .2rem; font-size: 1rem; }
+.runner-name { margin: .8rem 0 .1rem; font-size: .92rem; }
+.runner-time { color: var(--muted); font-size: .8rem; margin-bottom: .35rem; }
 table { border-collapse: collapse; width: 100%; background: var(--panel); font-size: .86rem; }
 th, td { padding: .45rem .6rem; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
 th { background: var(--panel-2); }

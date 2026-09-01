@@ -25,7 +25,8 @@ restarting.
 
 A machine that drives TVTest's command line EPG capture on a schedule can post
 what it did to `POST /api/runner-status`, and the **Sync status** tab shows the
-latest round for each of them. Send the add-on token in `X-EPG-Token`, as with
+latest round for each of them: which tuner, how it ended, how many channels it
+covered and how long it took. Send the add-on token in `X-EPG-Token`, as with
 every other write.
 
 ```json
