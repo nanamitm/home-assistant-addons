@@ -35,7 +35,8 @@ every other write.
   "finished": "2026-09-01T04:58:11+09:00",
   "captures": [
     {"driver": "BonDriver_dantto4k.dll", "result": "完了", "elapsed": 1450,
-     "exit_code": 0, "cancelled": false, "skipped": ""}
+     "exit_code": 0, "cancelled": false, "skipped": "",
+     "channels": 9, "captured": 9}
   ]
 }
 ```

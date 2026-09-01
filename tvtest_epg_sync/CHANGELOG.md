@@ -1,3 +1,8 @@
+## 1.4.1
+
+- Keep the channel counts a runner reports and show them on the Sync status
+  tab, so a capture that covered part of a tuner's channels says so.
+
 ## 1.4.0
 
 - Accept capture reports from a runner that drives TVTest's command line EPG

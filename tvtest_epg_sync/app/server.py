@@ -775,7 +775,8 @@ class RunnerStore:
     MAX_TEXT = 200
     CAPTURE_KEYS = (
         "driver", "result", "started", "finished", "elapsed", "timeout",
-        "exit_code", "cancelled", "cancel_reason", "skipped",
+        "exit_code", "cancelled", "cancel_reason", "skipped", "adopted",
+        "channels", "captured",
     )
 
     def __init__(self, data_dir: str) -> None:
@@ -1911,14 +1912,18 @@ def render_status_page(entries: list[Entry], context: Context, prefix: str) -> s
     runners.forEach(function (r) {{
       var rows = "";
       (r.captures || []).forEach(function (c) {{
+        var ch = c.channels ? (c.captured != null && c.captured !== c.channels
+          ? c.captured + "/" + c.channels : String(c.channels)) : "-";
         rows += "<tr><td>" + esc(c.driver) + "</td><td>" + esc(c.result || "")
-          + "</td><td class=num>" + (c.elapsed ? Math.round(c.elapsed / 60) + " 分" : "-")
+          + "</td><td class=num>" + esc(ch) + "</td>"
+          + "<td class=num>" + (c.elapsed ? Math.round(c.elapsed / 60) + " 分" : "-")
           + "</td></tr>";
       }});
       html += "<h3>" + esc(r.name) + (r.host ? " (" + esc(r.host) + ")" : "") + "</h3>"
         + '<div class="sub">' + esc(r.finished || r.received_at) + "</div>"
         + (rows
-          ? "<table><thead><tr><th>チューナー</th><th>結果</th><th class=num>所要</th>"
+          ? "<table><thead><tr><th>チューナー</th><th>結果</th>"
+            + "<th class=num>チャンネル</th><th class=num>所要</th>"
             + "</tr></thead><tbody>" + rows + "</tbody></table>"
           : '<div class="empty">取得したチューナーがありません。</div>');
     }});
@@ -1951,9 +1956,11 @@ def render_runners(reports: list[dict[str, Any]]) -> str:
         if report["host"]:
             title += " (%s)" % escape(report["host"])
         rows = "".join(
-            "<tr><td>{driver}</td><td>{result}</td><td class=num>{elapsed}</td></tr>".format(
+            "<tr><td>{driver}</td><td>{result}</td><td class=num>{channels}</td>"
+            "<td class=num>{elapsed}</td></tr>".format(
                 driver=escape(str(capture.get("driver", ""))),
                 result=escape(str(capture.get("result", ""))),
+                channels=_channel_text(capture),
                 elapsed=(
                     "%d 分" % round(capture["elapsed"] / 60)
                     if isinstance(capture.get("elapsed"), int) and capture["elapsed"]
@@ -1964,6 +1971,7 @@ def render_runners(reports: list[dict[str, Any]]) -> str:
         )
         body = (
             "<table><thead><tr><th>チューナー</th><th>結果</th>"
+            "<th class=num>チャンネル</th>"
             "<th class=num>所要</th></tr></thead><tbody>" + rows + "</tbody></table>"
             if rows
             else '<div class="empty">取得したチューナーがありません。</div>'
@@ -1973,6 +1981,17 @@ def render_runners(reports: list[dict[str, Any]]) -> str:
             % (title, escape(report["finished"] or report["received_at"]), body)
         )
     return "".join(blocks)
+
+
+def _channel_text(capture: dict[str, Any]) -> str:
+    """How many channels the capture covered, and how many it finished."""
+    total = capture.get("channels")
+    if not isinstance(total, int) or total <= 0:
+        return "-"
+    done = capture.get("captured")
+    if isinstance(done, int) and done != total:
+        return "%d/%d" % (done, total)
+    return str(total)
 
 
 def render_row(e: Entry) -> str:
