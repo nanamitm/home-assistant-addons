@@ -1,3 +1,10 @@
+## 1.4.0
+
+- Accept capture reports from a runner that drives TVTest's command line EPG
+  capture (`POST /api/runner-status`), and show the latest round per runner on
+  the Sync status tab: which tuner was captured, how it ended and how long it
+  took.
+
 ## 1.3.2
 
 - Remember the guide height along with the other display settings.

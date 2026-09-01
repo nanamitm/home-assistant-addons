@@ -21,6 +21,33 @@
 Settings take effect when the dialog is closed; TVTest does not need
 restarting.
 
+## Capture reports
+
+A machine that drives TVTest's command line EPG capture on a schedule can post
+what it did to `POST /api/runner-status`, and the **Sync status** tab shows the
+latest round for each of them. Send the add-on token in `X-EPG-Token`, as with
+every other write.
+
+```json
+{
+  "name": "epg-runner",
+  "host": "living-pc",
+  "finished": "2026-09-01T04:58:11+09:00",
+  "captures": [
+    {"driver": "BonDriver_dantto4k.dll", "result": "完了", "elapsed": 1450,
+     "exit_code": 0, "cancelled": false, "skipped": ""}
+  ]
+}
+```
+
+`name` identifies the runner and is the only required field; the newest report
+replaces the previous one for that name. `GET /api/runner-status` returns what
+is held.
+
+[TVTest EPG Runner](https://github.com/nanamitm/tvtest-epg-runner) is one such
+runner: it captures around EDCB's recordings and aborts a capture when a
+recording needs the tuner.
+
 ## Web program guide
 
 The add-on opens on a program guide built from the EPG already held by the

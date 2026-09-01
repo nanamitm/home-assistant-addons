@@ -763,6 +763,112 @@ class LogoStore:
             return key in self._items
 
 
+class RunnerStore:
+    """番組表を取得しに行くランナーの実行結果を保管する。
+
+    保持するのはランナーごとの最新の1回分だけ。EPG そのものではなく運用の
+    記録なので、番組データとは別のファイルに置く。
+    """
+
+    MAX_RUNNERS = 16
+    MAX_CAPTURES = 32
+    MAX_TEXT = 200
+    CAPTURE_KEYS = (
+        "driver", "result", "started", "finished", "elapsed", "timeout",
+        "exit_code", "cancelled", "cancel_reason", "skipped",
+    )
+
+    def __init__(self, data_dir: str) -> None:
+        self._path = os.path.join(data_dir, "runners.json")
+        self._lock = threading.RLock()
+        self._items: dict[str, dict[str, Any]] = {}
+        self._load()
+
+    def _load(self) -> None:
+        try:
+            with open(self._path, "r", encoding="utf-8") as file:
+                data = json.load(file)
+        except FileNotFoundError:
+            return
+        except (OSError, ValueError) as exc:
+            LOG.warning("ランナーの実行結果を読めませんでした: %s", exc)
+            return
+
+        for raw in data.get("runners", []):
+            try:
+                report = self._clean(
+                    raw, raw.get("source", ""), raw.get("received_at", ""))
+            except (TypeError, ValueError):
+                continue
+            self._items[report["name"]] = report
+
+    def _save(self) -> None:
+        data = {"saved_at": utcnow(), "runners": self.list_reports()}
+        write_atomic(
+            self._path,
+            json.dumps(data, ensure_ascii=False, indent=1).encode("utf-8"),
+        )
+
+    def update(self, payload: Any, source: str) -> dict[str, Any]:
+        report = self._clean(payload, source, "")
+        with self._lock:
+            self._items[report["name"]] = report
+            excess = len(self._items) - self.MAX_RUNNERS
+            if excess > 0:
+                oldest = sorted(self._items.values(), key=lambda r: r["received_at"])
+                for stale in oldest[:excess]:
+                    del self._items[stale["name"]]
+            self._save()
+        return report
+
+    def list_reports(self) -> list[dict[str, Any]]:
+        with self._lock:
+            return sorted(
+                self._items.values(), key=lambda r: r["received_at"], reverse=True)
+
+    @classmethod
+    def _clean(cls, payload: Any, source: str, received_at: str) -> dict[str, Any]:
+        if not isinstance(payload, dict):
+            raise ValueError("本文はオブジェクトで指定してください")
+
+        name = cls._text(payload.get("name"), 64)
+        if not name:
+            raise ValueError("name を指定してください")
+
+        raw_captures = payload.get("captures", [])
+        if not isinstance(raw_captures, list):
+            raise ValueError("captures は配列で指定してください")
+
+        captures = []
+        for raw in raw_captures[: cls.MAX_CAPTURES]:
+            if not isinstance(raw, dict):
+                continue
+            capture = {}
+            for key in cls.CAPTURE_KEYS:
+                value = raw.get(key)
+                if value is None or isinstance(value, (bool, int)):
+                    capture[key] = value
+                else:
+                    capture[key] = cls._text(value, cls.MAX_TEXT)
+            if capture.get("driver"):
+                captures.append(capture)
+
+        return {
+            "name": name,
+            "host": cls._text(payload.get("host"), 64),
+            "finished": cls._text(payload.get("finished"), 40),
+            "captures": captures,
+            "received_at": cls._text(received_at, 40) or utcnow(),
+            "source": cls._text(source, 64),
+        }
+
+    @staticmethod
+    def _text(value: Any, limit: int) -> str:
+        if value is None:
+            return ""
+        return str(value).strip()[:limit]
+
+
 class GuideCache:
     """保存 blob を ETag 単位で解析して再利用する。"""
 
@@ -1040,6 +1146,7 @@ class Context:
         self.token = token
         self.metadata = MetadataStore(store.data_dir)
         self.logos = LogoStore(store.data_dir)
+        self.runners = RunnerStore(store.data_dir)
         self.guide = GuideCache(store, self.metadata, self.logos)
         self.started_at = utcnow()
 
@@ -1213,6 +1320,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_HEAD(self) -> None:
         self._dispatch("GET")
 
+    def do_POST(self) -> None:
+        self._dispatch("POST")
+
     def do_PUT(self) -> None:
         self._dispatch("PUT")
 
@@ -1261,6 +1371,13 @@ class Handler(BaseHTTPRequestHandler):
             if method == "GET" and path == "/api/logos":
                 self._handle_list_logos(query)
                 return
+            if path == "/api/runner-status":
+                if method == "POST":
+                    self._handle_put_runner_status()
+                    return
+                if method == "GET":
+                    self._handle_list_runner_status()
+                    return
 
             logo = LOGO_PATH_RE.match(path)
             if logo:
@@ -1394,6 +1511,37 @@ class Handler(BaseHTTPRequestHandler):
         LOG.info("%s から %d サービスの局情報を受信しました。", self._source_name(), count)
         self.context.bus.publish({"type": "metadata", "count": count})
         self._send_json(HTTPStatus.OK, {"result": "stored", "count": count})
+
+    def _handle_put_runner_status(self) -> None:
+        body = self._read_body()
+        if body is None:
+            return
+
+        try:
+            payload = json.loads(body.decode("utf-8"))
+        except (UnicodeDecodeError, ValueError):
+            self._send_error_json(HTTPStatus.BAD_REQUEST, "JSON を解釈できません")
+            return
+
+        try:
+            report = self.context.runners.update(payload, self._source_name())
+        except ValueError as exc:
+            self._send_error_json(HTTPStatus.BAD_REQUEST, str(exc))
+            return
+
+        LOG.info(
+            "%s の取得結果を受け取りました: %s",
+            report["name"],
+            ", ".join(
+                "%s %s" % (c.get("driver", "?"), c.get("result", ""))
+                for c in report["captures"]
+            ) or "(なし)",
+        )
+        self._send_json(HTTPStatus.OK, {"runner": report})
+
+    def _handle_list_runner_status(self) -> None:
+        self._send_json(
+            HTTPStatus.OK, {"runners": self.context.runners.list_reports()})
 
     def _handle_list_logos(self, query: str) -> None:
         logos = self.context.logos.list_logos()
@@ -1647,6 +1795,9 @@ def render_status_page(entries: list[Entry], context: Context, prefix: str) -> s
  :root {{ color-scheme: light dark; }}
  body {{ font-family: system-ui, "Segoe UI", sans-serif; margin: 1.5rem; line-height: 1.5; }}
  h1 {{ font-size: 1.3rem; margin: 0 0 .25rem; }}
+ h2 {{ font-size: 1rem; margin: 1.75rem 0 .5rem; }}
+ h3 {{ font-size: .9rem; margin: 1rem 0 .1rem; }}
+ #runners .sub {{ margin-bottom: .4rem; }}
  .sub {{ opacity: .7; font-size: .9rem; margin-bottom: 1.25rem; }}
  .cards {{ display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem; }}
  .card {{ border: 1px solid rgba(128,128,128,.35); border-radius: 8px; padding: .75rem 1rem; min-width: 8rem; }}
@@ -1672,6 +1823,8 @@ def render_status_page(entries: list[Entry], context: Context, prefix: str) -> s
  <div class="card"><div class="v" id="v-size">{total_size / 1024 / 1024:.1f} MB</div><div class="k">保管サイズ</div></div>
 </div>
 <div id="list">{render_table(rows)}</div>
+<h2>番組表の取得</h2>
+<div id="runners">{render_runners(context.runners.list_reports())}</div>
 <p class="sub">API: <code>{escape(prefix)}/api/services</code></p>
 <script>
 (function () {{
@@ -1749,11 +1902,77 @@ def render_status_page(entries: list[Entry], context: Context, prefix: str) -> s
     schedule(key);
   }};
 
+  function renderRunners(data) {{
+    var runners = data.runners || [];
+    if (!runners.length) {{
+      return '<div class="empty">まだ取得結果を受け取っていません。</div>';
+    }}
+    var html = "";
+    runners.forEach(function (r) {{
+      var rows = "";
+      (r.captures || []).forEach(function (c) {{
+        rows += "<tr><td>" + esc(c.driver) + "</td><td>" + esc(c.result || "")
+          + "</td><td class=num>" + (c.elapsed ? Math.round(c.elapsed / 60) + " 分" : "-")
+          + "</td></tr>";
+      }});
+      html += "<h3>" + esc(r.name) + (r.host ? " (" + esc(r.host) + ")" : "") + "</h3>"
+        + '<div class="sub">' + esc(r.finished || r.received_at) + "</div>"
+        + (rows
+          ? "<table><thead><tr><th>チューナー</th><th>結果</th><th class=num>所要</th>"
+            + "</tr></thead><tbody>" + rows + "</tbody></table>"
+          : '<div class="empty">取得したチューナーがありません。</div>');
+    }});
+    return html;
+  }}
+
+  function refreshRunners() {{
+    fetch(base + "/api/runner-status", {{ headers: {{ "Accept": "application/json" }} }})
+      .then(function (r) {{ return r.ok ? r.json() : null; }})
+      .then(function (d) {{
+        if (d) {{ document.getElementById("runners").innerHTML = renderRunners(d); }}
+      }})
+      .catch(function () {{}});
+  }}
+
   // SSE が切れている間の保険
-  setInterval(function () {{ refresh(null); }}, 60000);
+  setInterval(function () {{ refresh(null); refreshRunners(); }}, 60000);
 }})();
 </script>
 </body></html>"""
+
+
+def render_runners(reports: list[dict[str, Any]]) -> str:
+    if not reports:
+        return '<div class="empty">まだ取得結果を受け取っていません。</div>'
+
+    blocks = []
+    for report in reports:
+        title = escape(report["name"])
+        if report["host"]:
+            title += " (%s)" % escape(report["host"])
+        rows = "".join(
+            "<tr><td>{driver}</td><td>{result}</td><td class=num>{elapsed}</td></tr>".format(
+                driver=escape(str(capture.get("driver", ""))),
+                result=escape(str(capture.get("result", ""))),
+                elapsed=(
+                    "%d 分" % round(capture["elapsed"] / 60)
+                    if isinstance(capture.get("elapsed"), int) and capture["elapsed"]
+                    else "-"
+                ),
+            )
+            for capture in report["captures"]
+        )
+        body = (
+            "<table><thead><tr><th>チューナー</th><th>結果</th>"
+            "<th class=num>所要</th></tr></thead><tbody>" + rows + "</tbody></table>"
+            if rows
+            else '<div class="empty">取得したチューナーがありません。</div>'
+        )
+        blocks.append(
+            "<h3>%s</h3><div class=\"sub\">%s</div>%s"
+            % (title, escape(report["finished"] or report["received_at"]), body)
+        )
+    return "".join(blocks)
 
 
 def render_row(e: Entry) -> str:
