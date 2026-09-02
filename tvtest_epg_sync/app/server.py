@@ -1469,10 +1469,18 @@ class Handler(BaseHTTPRequestHandler):
             self._send(HTTPStatus.OK, body, "text/plain; charset=utf-8")
             return
 
+        services = []
+        for entry in entries:
+            item = entry.to_json()
+            # 局名は別に保管しているので、一覧を読むときに引き当てる
+            metadata = self.context.metadata.get(entry.key)
+            item["name"] = metadata.name if metadata is not None else ""
+            services.append(item)
+
         self._send_json(
             HTTPStatus.OK,
             {
-                "services": [e.to_json() for e in entries],
+                "services": services,
                 "summary": {"subscribers": self.context.bus.subscriber_count()},
             },
         )
@@ -1784,7 +1792,8 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def render_status_page(entries: list[Entry], context: Context, prefix: str) -> str:
-    rows = "".join(render_row(e) for e in entries)
+    rows = "".join(
+        render_row(e, _metadata_name(context, e.key)) for e in entries)
     total_size = sum(e.size for e in entries)
     total_events = sum(e.event_count for e in entries)
 
@@ -1856,6 +1865,7 @@ def render_status_page(entries: list[Entry], context: Context, prefix: str) -> s
       size += s.size;
       rows += "<tr data-key=\\"" + s.nid + "_" + s.tsid + "_" + s.sid + "\\">"
         + "<td class=id>" + pad(s.nid) + "/" + pad(s.tsid) + "/" + pad(s.sid) + "</td>"
+        + "<td>" + esc(s.name || "-") + "</td>"
         + "<td class=num>" + s.event_count + "</td>"
         + "<td class=num>" + Math.round(s.size / 1024) + " KB</td>"
         + "<td>" + esc(local(s.updated_at)) + "</td>"
@@ -2001,14 +2011,16 @@ def _channel_text(capture: dict[str, Any]) -> str:
     return str(total)
 
 
-def render_row(e: Entry) -> str:
+def render_row(e: Entry, name: str = "") -> str:
     return (
         '<tr data-key="{nid}_{tsid}_{sid}"><td class=id>{nid:04X}/{tsid:04X}/{sid:04X}</td>'
+        "<td>{name}</td>"
         "<td class=num>{count}</td><td class=num>{size}</td>"
         "<td>{updated}</td><td>{source}</td></tr>".format(
             nid=e.key.nid,
             tsid=e.key.tsid,
             sid=e.key.sid,
+            name=escape(name) or "-",
             count=e.event_count,
             size=f"{e.size / 1024:.0f} KB",
             updated=escape(local_text(e.updated_at)),
@@ -2021,10 +2033,15 @@ def render_table(rows: str) -> str:
     if not rows:
         return '<div class="empty">まだ EPG を受信していません。</div>'
     return (
-        "<table><thead><tr><th>NID/TSID/SID</th><th class=num>番組数</th>"
+        "<table><thead><tr><th>NID/TSID/SID</th><th>局名</th><th class=num>番組数</th>"
         "<th class=num>サイズ</th><th>最終更新</th><th>更新元</th></tr></thead>"
         "<tbody>" + rows + "</tbody></table>"
     )
+
+
+def _metadata_name(context: Context, key: ServiceKey) -> str:
+    metadata = context.metadata.get(key)
+    return metadata.name if metadata is not None else ""
 
 
 def local_text(text: str) -> str:

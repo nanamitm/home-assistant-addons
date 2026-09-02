@@ -412,12 +412,13 @@
     var table = node("table");
     var head = node("thead");
     var headRow = node("tr");
-    ["NID/TSID/SID", "番組数", "サイズ", "最終更新", "更新元"].forEach(function (text) { headRow.appendChild(node("th", "", text)); });
+    ["NID/TSID/SID", "局名", "番組数", "サイズ", "最終更新", "更新元"].forEach(function (text) { headRow.appendChild(node("th", "", text)); });
     head.appendChild(headRow); table.appendChild(head);
     var body = node("tbody");
     services.forEach(function (service) {
       var row = node("tr");
       row.appendChild(node("td", "mono", serviceId(service)));
+      row.appendChild(node("td", "", service.name || "-"));
       row.appendChild(node("td", "num", String(service.event_count)));
       row.appendChild(node("td", "num", Math.round(service.size / 1024) + " KB"));
       row.appendChild(node("td", "", localTime(service.updated_at)));

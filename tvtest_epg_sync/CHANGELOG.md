@@ -1,3 +1,8 @@
+## 1.4.3
+
+- Show the station name beside the service ID on the Sync status tab, so a
+  row can be read without decoding NID/TSID/SID.
+
 ## 1.4.2
 
 - Show the times on the Sync status tab in the time zone of whoever is
