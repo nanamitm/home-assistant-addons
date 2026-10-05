@@ -1,3 +1,10 @@
+## 1.4.4
+
+- Honor `If-None-Match: *` on service uploads, so an instance creating a
+  service the add-on did not have yet cannot overwrite one another instance
+  created in the meantime. The upload is refused with 412 and the instance
+  re-reads, merges and retries as it does for `If-Match`.
+
 ## 1.4.3
 
 - Show the station name beside the service ID on the Sync status tab, so a
