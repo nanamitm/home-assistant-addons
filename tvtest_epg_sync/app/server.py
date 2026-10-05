@@ -275,10 +275,12 @@ class Store:
         source: str,
         if_match: Optional[str],
         force: bool,
+        if_none_match: Optional[str] = None,
     ) -> tuple[str, Entry]:
         """blob を保存する
 
         戻り値は ("stored" | "unchanged" | "stale" | "conflict", 現在の Entry)。
+        If-None-Match: * は新規作成のみを許可し、既にあれば conflict とする。
         """
         etag = compute_etag(blob)
 
@@ -286,6 +288,8 @@ class Store:
             current = self._entries.get(key)
 
             if current is not None:
+                if if_none_match is not None and if_none_match in ("*", current.etag):
+                    return "conflict", current
                 if if_match is not None and if_match != "*" and if_match != current.etag:
                     return "conflict", current
                 if current.etag == etag:
@@ -1670,6 +1674,7 @@ class Handler(BaseHTTPRequestHandler):
         result, entry = self.context.store.put_blob(
             key, blob, version, event_count, source,
             self.headers.get("If-Match"), force,
+            self.headers.get("If-None-Match"),
         )
 
         headers = {"ETag": entry.etag, "X-EPG-Version": str(entry.version)}

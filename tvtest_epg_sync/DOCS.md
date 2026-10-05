@@ -144,7 +144,8 @@ contents.
 - While running it pushes the services it received from a tuner itself, and
   applies what other instances push.
 - Sending is a read-modify-write guarded by an ETag. If another instance got
-  there first, the sender re-reads, merges again and retries.
+  there first, the sender re-reads, merges again and retries. This also holds
+  when two instances create the same service at once.
 
 Versions come from the broadcast time signal rather than the PC clock, so
 instances whose clocks disagree still order updates correctly.

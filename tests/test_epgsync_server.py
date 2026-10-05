@@ -241,6 +241,28 @@ class ServerTestCase(ServerFixture):
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(body)["result"], "stored")
 
+    def test_if_none_match_creates_only_new_service(self):
+        # まだ無いサービスなら作成できる
+        status, _, body = self.put(
+            make_blob(version=1000, body=b"\x01"), headers={"If-None-Match": "*"}
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["result"], "stored")
+
+        # 別のクライアントが先に作成していれば、内容が同じでも上書きしない
+        for blob in (
+            make_blob(version=2000, body=b"\x02"),
+            make_blob(version=1000, body=b"\x01"),
+        ):
+            status, _, body = self.put(blob, headers={"If-None-Match": "*"})
+            self.assertEqual(status, 412)
+            payload = json.loads(body)
+            self.assertEqual(payload["result"], "conflict")
+            self.assertEqual(payload["current"]["version"], 1000)
+
+        _, _, body = self.request("GET", "/api/service/4/16400/228")
+        self.assertEqual(body, make_blob(version=1000, body=b"\x01"))
+
     # -- 削除と永続化 ------------------------------------------------------
 
     def test_delete(self):
