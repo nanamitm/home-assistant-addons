@@ -20,6 +20,7 @@
   var dialog = document.getElementById("event-dialog");
   var detail = document.getElementById("event-detail");
   var guideAbort = null;
+  var lastGuideKey = null;
   var staleWhileHidden = false;
   var lastGuide = null;
   var lastTimeline = null;
@@ -139,15 +140,25 @@
     var controller = window.AbortController ? new AbortController() : null;
     guideAbort = controller;
     connection.textContent = "番組表を更新しています…";
+    var etag = null;
     return fetch(api("/api/guide?date=" + encodeURIComponent(dateInput.value)), {
       headers: { Accept: "application/json" },
       signal: controller ? controller.signal : undefined
     })
       .then(function (response) {
         if (!response.ok) throw new Error("HTTP " + response.status);
+        // 中身が前回と同じなら(ブラウザが 304 を受けてキャッシュを返した場合も)
+        // 数千番組ぶんの描画をやり直さない
+        etag = response.headers.get("ETag");
+        if (etag && etag === lastGuideKey && lastGuide) return null;
         return response.json();
       })
       .then(function (data) {
+        if (data === null) {
+          connection.textContent = "自動更新中 / 最終取得 " + new Date().toLocaleTimeString("ja-JP");
+          return;
+        }
+        lastGuideKey = etag;
         lastGuide = data;
         renderGuide(data);
         if (keepPosition) {
@@ -158,6 +169,7 @@
       })
       .catch(function (error) {
         if (error && error.name === "AbortError") return;
+        lastGuideKey = null; // 次に取れたものは必ず描画し直す
         connection.textContent = "番組表を取得できません";
         showMessage("番組表の取得に失敗しました: " + error.message);
       })

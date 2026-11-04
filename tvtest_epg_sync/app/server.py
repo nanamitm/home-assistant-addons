@@ -13,6 +13,7 @@ wchar_t の差(CharType 問題)の影響も受けない。
 
 from __future__ import annotations
 
+import bisect
 import hashlib
 import json
 import logging
@@ -509,6 +510,8 @@ class MetadataStore:
         self._path = os.path.join(data_dir, "metadata.json")
         self._lock = threading.RLock()
         self._items: dict[ServiceKey, ServiceMetadata] = {}
+        # 変わるたびに増える。番組表の応答キャッシュが古くなったかの判定に使う。
+        self.revision = 0
         self._load()
 
     def _load(self) -> None:
@@ -530,6 +533,7 @@ class MetadataStore:
             self._items[item.key] = item
 
     def _save(self) -> None:
+        self.revision += 1
         data = {
             "saved_at": utcnow(),
             "services": [item.to_json() for item in self._items.values()],
@@ -660,6 +664,8 @@ class LogoStore:
         self._lock = threading.RLock()
         self._items: dict[LogoKey, dict[str, Any]] = {}
         self._converted: dict[LogoKey, bytes] = {}
+        # 変わるたびに増える。番組表の応答キャッシュが古くなったかの判定に使う。
+        self.revision = 0
 
         os.makedirs(self._dir, exist_ok=True)
         self._load()
@@ -694,6 +700,7 @@ class LogoStore:
         LOG.info("%d 個の局ロゴを読み込みました。", len(self._items))
 
     def _save(self) -> None:
+        self.revision += 1
         data = {
             "saved_at": utcnow(),
             "logos": [
@@ -877,20 +884,93 @@ class RunnerStore:
 class GuideCache:
     """保存 blob を ETag 単位で解析して再利用する。"""
 
+    # 組み立て済みの番組表を何通り(表示範囲)まで覚えておくか
+    MAX_RESPONSES = 4
+
     def __init__(self, store: Store, metadata: MetadataStore, logos: "LogoStore") -> None:
         self._store = store
         self._metadata = metadata
         self._logos = logos
         self._lock = threading.RLock()
         self._cache: dict[ServiceKey, tuple[str, Optional[epg_parser.EpgService], str]] = {}
+        # サービス -> (解析結果, 開始時刻の一覧 or None, 最長の番組の長さ)
+        self._range_index: dict[
+            ServiceKey,
+            tuple[epg_parser.EpgService, Optional[list[datetime]], timedelta],
+        ] = {}
+        # サービス -> (解析結果, event_id -> 番組)
+        self._id_maps: dict[
+            ServiceKey, tuple[epg_parser.EpgService, dict[int, epg_parser.EpgEvent]]
+        ] = {}
+        # 表示範囲 -> (データの指紋, ETag, JSON 本文)
+        self._responses: dict[tuple[datetime, datetime], tuple[str, str, bytes]] = {}
+        # 事前解析の待ち行列。同じサービスが続けて届いても 1 回にまとめる。
+        self._warm_cond = threading.Condition(threading.Lock())
+        self._warm_pending: dict[ServiceKey, None] = {}
+        self._warm_thread: Optional[threading.Thread] = None
 
     def invalidate(self, key: ServiceKey) -> None:
         with self._lock:
             self._cache.pop(key, None)
+            self._range_index.pop(key, None)
+            self._id_maps.pop(key, None)
+
+    # -- 事前解析 ------------------------------------------------------------
+    #
+    # 解析は 1 サービスあたり数十〜数百ミリ秒かかり、全局では 20 秒を超える。
+    # 番組表の要求の中で解析すると、EPG の受信中は要求のたびに更新された局の
+    # 解析待ちになるので、受け取った時点で裏で解析しておく。
+
+    def schedule_parse(self, key: ServiceKey) -> None:
+        with self._warm_cond:
+            self._warm_pending[key] = None
+            self._warm_cond.notify()
+
+    def start_warmer(self, stop: Optional[threading.Event] = None) -> threading.Thread:
+        """事前解析のスレッドを起動し、保存済みの全サービスを解析させる。"""
+        for entry in self._store.list_entries():
+            self.schedule_parse(entry.key)
+        thread = threading.Thread(target=self._warm_loop, args=(stop,), daemon=True)
+        self._warm_thread = thread
+        thread.start()
+        return thread
+
+    def _warm_loop(self, stop: Optional[threading.Event]) -> None:
+        while stop is None or not stop.is_set():
+            with self._warm_cond:
+                while not self._warm_pending:
+                    if stop is not None and stop.is_set():
+                        return
+                    self._warm_cond.wait(1.0)
+                key = next(iter(self._warm_pending))
+                del self._warm_pending[key]
+            try:
+                self.get(key)
+            except Exception:  # 解析の失敗で事前解析そのものを止めない
+                LOG.exception("%s の事前解析に失敗しました。", key)
+
+    def wait_idle(self, timeout: float = 30.0) -> bool:
+        """事前解析が追いつくまで待つ(テスト用)。"""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            with self._warm_cond:
+                if not self._warm_pending:
+                    return True
+            time.sleep(0.01)
+        return False
 
     def get(
         self, key: ServiceKey
     ) -> Optional[tuple[Entry, Optional[epg_parser.EpgService], str]]:
+        # 解析済みで変わっていなければ、blob をディスクから読み直さない
+        entry = self._store.get_entry(key)
+        if entry is None:
+            return None
+        with self._lock:
+            cached = self._cache.get(key)
+            if cached is not None and cached[0] == entry.etag:
+                return entry, cached[1], cached[2]
+
         result = self._store.get_blob(key)
         if result is None:
             return None
@@ -1042,17 +1122,16 @@ class GuideCache:
 
         self._mark_simulcast_services(services, parsed_services)
 
-        event_index: dict[tuple[int, int, int, int], epg_parser.EpgEvent] = {}
-        for _entry, parsed in parsed_services:
-            for event in parsed.events:
-                event_index[(event.key.nid, event.key.tsid, event.key.sid, event.event_id)] = event
+        event_index = _EventLookup(
+            {entry.key: parsed for entry, parsed in parsed_services}, self._event_ids
+        )
 
         item_by_key = {
             (item["nid"], item["tsid"], item["sid"]): item for item in services
         }
         for entry, parsed in parsed_services:
             item = item_by_key[(entry.key.nid, entry.key.tsid, entry.key.sid)]
-            for event in parsed.events:
+            for event in self._events_in_range(entry, parsed, first, last):
                 if event.end <= first or event.start >= last:
                     continue
                 data = epg_parser.event_to_dict(event)
@@ -1065,6 +1144,79 @@ class GuideCache:
             "generated_at": datetime.now(epg_parser.JST).replace(microsecond=0).isoformat(),
             "services": services,
         }
+
+    def _event_ids(
+        self, key: ServiceKey, parsed: epg_parser.EpgService
+    ) -> dict[int, epg_parser.EpgEvent]:
+        """サービスの event_id -> 番組。共有イベントの参照先を引くときだけ作る。"""
+        with self._lock:
+            cached = self._id_maps.get(key)
+        if cached is not None and cached[0] is parsed:
+            return cached[1]
+        ids = {event.event_id: event for event in parsed.events}
+        with self._lock:
+            self._id_maps[key] = (parsed, ids)
+        return ids
+
+    def _events_in_range(
+        self,
+        entry: Entry,
+        parsed: epg_parser.EpgService,
+        first: datetime,
+        last: datetime,
+    ) -> list[epg_parser.EpgEvent]:
+        """表示範囲にかかりうる番組だけを切り出す(最終判定は呼び出し側)。
+
+        blob には保持期間ぶんの過去番組が残り、全局で数十万件になる。
+        開始時刻順に並んでいれば二分探索で範囲を絞る。最長の番組の長さだけ
+        手前から探すので、範囲の前から続いている番組も漏れない。
+        """
+        with self._lock:
+            index = self._range_index.get(entry.key)
+        if index is None or index[0] is not parsed:
+            events = parsed.events
+            starts = [event.start for event in events]
+            ordered = all(a <= b for a, b in zip(starts, starts[1:]))
+            longest = timedelta(seconds=max((e.duration for e in events), default=0))
+            index = (parsed, starts if ordered else None, longest)
+            with self._lock:
+                self._range_index[entry.key] = index
+        _parsed, starts, longest = index
+        if starts is None:
+            return parsed.events
+        lo = bisect.bisect_left(starts, first - longest)
+        hi = bisect.bisect_left(starts, last)
+        return parsed.events[lo:hi]
+
+    def _fingerprint(self) -> str:
+        """番組表の中身を左右するデータの指紋。どれかが変われば変わる。"""
+        digest = hashlib.sha1()
+        for entry in sorted(self._store.list_entries(), key=lambda e: e.key):
+            digest.update(f"{entry.key.filename}:{entry.etag};".encode())
+        digest.update(f"m{self._metadata.revision};l{self._logos.revision}".encode())
+        return digest.hexdigest()
+
+    def guide_response(self, first: datetime, last: datetime) -> tuple[str, bytes]:
+        """番組表の JSON 本文と ETag。データが変わっていなければ組み立て直さない。"""
+        fingerprint = self._fingerprint()
+        range_key = (first, last)
+        with self._lock:
+            cached = self._responses.get(range_key)
+            if cached is not None and cached[0] == fingerprint:
+                return cached[1], cached[2]
+
+        body = json.dumps(self.build_guide(first, last), ensure_ascii=False).encode("utf-8")
+        etag = '"%s"' % hashlib.sha1(
+            f"{fingerprint}|{first.isoformat()}|{last.isoformat()}".encode()
+        ).hexdigest()[:32]
+        with self._lock:
+            # 組み立て中にデータが変わっていたら、古い指紋のまま覚える。
+            # 次の要求で指紋が合わず、組み立て直しになる。
+            self._responses.pop(range_key, None)
+            self._responses[range_key] = (fingerprint, etag, body)
+            while len(self._responses) > self.MAX_RESPONSES:
+                del self._responses[next(iter(self._responses))]
+        return etag, body
 
     def _logo_path(self, metadata: ServiceMetadata) -> Optional[str]:
         """番組表からロゴを引くための相対パス。持っていなければ None。
@@ -1110,6 +1262,28 @@ class GuideCache:
         data = epg_parser.event_to_dict(event, include_details=True)
         _fill_common_event(data, event, index, include_details=True)
         return entry, event, data
+
+
+class _EventLookup:
+    """(nid, tsid, sid, event_id) で番組を引く。必要になったサービスだけ索引を作る。
+
+    全番組の辞書を毎回作ると、過去番組を含めて数十万件を舐めることになる。
+    """
+
+    def __init__(
+        self,
+        parsed: dict[ServiceKey, epg_parser.EpgService],
+        ids_of: Any,
+    ) -> None:
+        self._parsed = parsed
+        self._ids_of = ids_of
+
+    def get(self, key: tuple[int, int, int, int]) -> Optional[epg_parser.EpgEvent]:
+        service_key = ServiceKey(key[0], key[1], key[2])
+        parsed = self._parsed.get(service_key)
+        if parsed is None:
+            return None
+        return self._ids_of(service_key, parsed).get(key[3])
 
 
 def _fill_common_event(
@@ -1247,7 +1421,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
+        if "Cache-Control" not in (headers or {}):
+            self.send_header("Cache-Control", "no-store")
         for name, value in (headers or {}).items():
             self.send_header(name, value)
         self.end_headers()
@@ -1495,7 +1670,17 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError as exc:
             self._send_error_json(HTTPStatus.BAD_REQUEST, str(exc))
             return
-        self._send_json(HTTPStatus.OK, self.context.guide.build_guide(first, last))
+        etag, body = self.context.guide.guide_response(first, last)
+        # no-cache: ブラウザは毎回 If-None-Match で確かめ、変わっていなければ
+        # 304 だけを受け取る(数 MB の本文を送り直さない)
+        headers = {"ETag": etag, "Cache-Control": "no-cache"}
+        if self.headers.get("If-None-Match") == etag:
+            self.send_response(HTTPStatus.NOT_MODIFIED)
+            for name, value in headers.items():
+                self.send_header(name, value)
+            self.end_headers()
+            return
+        self._send(HTTPStatus.OK, body, "application/json; charset=utf-8", headers)
 
     def _handle_guide_event(self, key: ServiceKey, event_id: int) -> None:
         result = self.context.guide.get_event(key, event_id)
@@ -1696,6 +1881,7 @@ class Handler(BaseHTTPRequestHandler):
 
         if result == "stored":
             self.context.guide.invalidate(key)
+            self.context.guide.schedule_parse(key)
             LOG.info(
                 "%s を更新しました (%d 番組, %d バイト, version=%d, from %s)",
                 key, event_count, len(blob), version, source,
@@ -2161,6 +2347,7 @@ def main() -> int:
     )
     for t in threads:
         t.start()
+    context.guide.start_warmer(stop)
 
     def shutdown(signum: int, _frame: Any) -> None:
         LOG.info("シグナル %d を受信しました。終了します。", signum)

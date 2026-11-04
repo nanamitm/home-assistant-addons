@@ -1,3 +1,16 @@
+## 1.4.6
+
+- Make the guide much cheaper to serve. EPG data is now parsed in the
+  background as soon as it arrives (and for every stored service at start
+  up), so a guide request no longer waits for parsing; past programmes kept
+  for the retention period are skipped with a binary search instead of
+  being scanned, and shared-event lookups no longer index every programme.
+  Building a day's guide from 248 services went from 8 s or more during
+  EPG capture to about 0.1 s.
+- Answer `/api/guide` with an ETag and `304 Not Modified` while nothing has
+  changed, and keep the built response, so a reload that finds the same
+  data sends no body and the page skips redrawing it.
+
 ## 1.4.5
 
 - Stop the guide page from piling up reloads while EPG data is arriving.
