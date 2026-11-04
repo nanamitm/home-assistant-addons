@@ -582,6 +582,70 @@ class ServerTestCase(ServerFixture):
         self.assertEqual(service["events"], [])
         self.assertTrue(service["parse_error"])
 
+    def test_guide_answers_not_modified_until_data_changes(self):
+        self.put(service_blob(event_blob(name="更新前")))
+        status, headers, _ = self.request("GET", "/api/guide?date=2026-08-29")
+        self.assertEqual(status, 200)
+        etag = headers["ETag"]
+        self.assertEqual(headers["Cache-Control"], "no-cache")
+
+        status, headers, body = self.request(
+            "GET", "/api/guide?date=2026-08-29", headers={"If-None-Match": etag})
+        self.assertEqual(status, 304)
+        self.assertEqual(body, b"")
+        self.assertEqual(headers["ETag"], etag)
+
+        # 別の日は別の本文
+        _, headers, _ = self.request("GET", "/api/guide?date=2026-08-30")
+        self.assertNotEqual(headers["ETag"], etag)
+
+        self.put(service_blob(event_blob(updated_time=3000, name="更新後")))
+        status, headers, body = self.request(
+            "GET", "/api/guide?date=2026-08-29", headers={"If-None-Match": etag})
+        self.assertEqual(status, 200)
+        self.assertNotEqual(headers["ETag"], etag)
+        self.assertEqual(json.loads(body)["services"][0]["events"][0]["title"], "更新後")
+
+    def test_guide_etag_follows_metadata_and_deletion(self):
+        self.put(service_blob(event_blob(), sid=0xE4))
+        self.put(service_blob(event_blob(), sid=0xE5))
+        _, headers, _ = self.request("GET", "/api/guide?date=2026-08-29")
+        first = headers["ETag"]
+
+        metadata = {"services": [{
+            "nid": 4, "tsid": 0x4010, "sid": 0xE4, "name": "総合テレビ",
+            "network_type": "terrestrial", "order": 1,
+        }]}
+        status, _, _ = self.request(
+            "PUT", "/api/service-metadata", data=json.dumps(metadata).encode())
+        self.assertEqual(status, 200)
+        status, headers, body = self.request(
+            "GET", "/api/guide?date=2026-08-29", headers={"If-None-Match": first})
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["services"][0]["name"], "総合テレビ")
+        second = headers["ETag"]
+
+        self.request("DELETE", "/api/service/4/16400/229")
+        status, _, body = self.request(
+            "GET", "/api/guide?date=2026-08-29", headers={"If-None-Match": second})
+        self.assertEqual(status, 200)
+        self.assertEqual(len(json.loads(body)["services"]), 1)
+
+    def test_uploaded_service_is_parsed_before_the_guide_asks(self):
+        stop = threading.Event()
+        self.addCleanup(stop.set)
+        self.context.guide.start_warmer(stop)
+        self.put(service_blob(event_blob(name="事前解析")))
+        self.assertTrue(self.context.guide.wait_idle(10))
+
+        # 解析済みなら番組表の要求で blob を読み直さない
+        def unexpected(_key):
+            raise AssertionError("解析済みの blob を読み直しました")
+        self.store.get_blob = unexpected
+        status, _, body = self.request("GET", "/api/guide?date=2026-08-29")
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["services"][0]["events"][0]["title"], "事前解析")
+
     # -- 局メタデータ ------------------------------------------------------
 
     def test_service_metadata_names_and_orders_guide(self):
