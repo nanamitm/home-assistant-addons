@@ -19,7 +19,8 @@
   var summary = document.getElementById("guide-summary");
   var dialog = document.getElementById("event-dialog");
   var detail = document.getElementById("event-detail");
-  var refreshTimer = null;
+  var guideAbort = null;
+  var staleWhileHidden = false;
   var lastGuide = null;
   var lastTimeline = null;
   var minuteHeight = 2;
@@ -121,7 +122,7 @@
     document.querySelectorAll(".view").forEach(function (view) {
       view.classList.toggle("active", view.id === name + "-view");
     });
-    if (name === "status") loadStatus();
+    if (name === "status") statusRefresh.now();
   }
 
   function showMessage(text) {
@@ -133,8 +134,15 @@
   function loadGuide(keepPosition) {
     var oldLeft = viewport.scrollLeft;
     var oldTop = viewport.scrollTop;
+    // 新しい取得を始めたら、まだ返ってきていない前の取得は打ち切る
+    if (guideAbort) guideAbort.abort();
+    var controller = window.AbortController ? new AbortController() : null;
+    guideAbort = controller;
     connection.textContent = "番組表を更新しています…";
-    fetch(api("/api/guide?date=" + encodeURIComponent(dateInput.value)), { headers: { Accept: "application/json" } })
+    return fetch(api("/api/guide?date=" + encodeURIComponent(dateInput.value)), {
+      headers: { Accept: "application/json" },
+      signal: controller ? controller.signal : undefined
+    })
       .then(function (response) {
         if (!response.ok) throw new Error("HTTP " + response.status);
         return response.json();
@@ -149,10 +157,23 @@
         connection.textContent = "自動更新中 / 最終取得 " + new Date().toLocaleTimeString("ja-JP");
       })
       .catch(function (error) {
+        if (error && error.name === "AbortError") return;
         connection.textContent = "番組表を取得できません";
         showMessage("番組表の取得に失敗しました: " + error.message);
+      })
+      .then(function () {
+        if (guideAbort === controller) guideAbort = null;
       });
   }
+
+  var guideRefresh = window.EpgSyncGuideLayout.createRefreshScheduler(
+    function (immediate) { return loadGuide(!immediate); },
+    { minInterval: 30000 }
+  );
+  var statusRefresh = window.EpgSyncGuideLayout.createRefreshScheduler(
+    loadStatus,
+    { minInterval: 5000 }
+  );
 
   function renderGuide(data) {
     headers.replaceChildren();
@@ -318,7 +339,11 @@
   }
 
   function loadStatus() {
-    fetch(api("/api/services"), { headers: { Accept: "application/json" } })
+    return Promise.all([loadServiceStatus(), loadRunnerStatus()]);
+  }
+
+  function loadServiceStatus() {
+    return fetch(api("/api/services"), { headers: { Accept: "application/json" } })
       .then(function (response) {
         if (!response.ok) throw new Error("HTTP " + response.status);
         return response.json();
@@ -327,8 +352,10 @@
       .catch(function (error) {
         document.getElementById("status-list").replaceChildren(node("div", "empty", "同期状態を取得できません: " + error.message));
       });
+  }
 
-    fetch(api("/api/runner-status"), { headers: { Accept: "application/json" } })
+  function loadRunnerStatus() {
+    return fetch(api("/api/runner-status"), { headers: { Accept: "application/json" } })
       .then(function (response) {
         if (!response.ok) throw new Error("HTTP " + response.status);
         return response.json();
@@ -432,7 +459,7 @@
     var date = new Date(dateInput.value + "T12:00:00");
     date.setDate(date.getDate() + offset);
     dateInput.value = localDate(date);
-    loadGuide(false);
+    guideRefresh.now();
   }
 
   function scrollToNow() {
@@ -442,7 +469,7 @@
     var now = new Date();
     if (now < first || now >= last) {
       dateInput.value = localDate(now);
-      loadGuide(false);
+      guideRefresh.now();
       return;
     }
     viewport.scrollTop = Math.max(0, window.EpgSyncGuideLayout.pixelAt(
@@ -455,9 +482,9 @@
   });
   document.getElementById("prev-day").addEventListener("click", function () { changeDay(-1); });
   document.getElementById("next-day").addEventListener("click", function () { changeDay(1); });
-  document.getElementById("today").addEventListener("click", function () { dateInput.value = localDate(new Date()); loadGuide(false); });
+  document.getElementById("today").addEventListener("click", function () { dateInput.value = localDate(new Date()); guideRefresh.now(); });
   document.getElementById("now").addEventListener("click", scrollToNow);
-  dateInput.addEventListener("change", function () { loadGuide(false); });
+  dateInput.addEventListener("change", function () { guideRefresh.now(); });
   zoom.addEventListener("change", function (event) {
     setMinuteHeight(event.target.value);
     saveFilters();
@@ -486,17 +513,33 @@
   applyStoredFilters();
   dateInput.value = localDate(new Date());
   columnWidth = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--column-width")) || 190;
-  loadGuide(false);
-  loadStatus();
+  guideRefresh.now();
+  statusRefresh.now();
+
+  // EPG の受信中は更新通知が毎秒のように届くため、通知ごとに番組表全体
+  // (数 MB、組み立てに数秒)を取り直すと取得が積み重なる。再取得は間引き、
+  // 画面が見えていない間は止めて、見えるようになったら 1 回だけ取り直す。
+  function requestRefresh() {
+    if (document.hidden) {
+      staleWhileHidden = true;
+      return;
+    }
+    guideRefresh.request();
+    statusRefresh.request();
+  }
+
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden && staleWhileHidden) {
+      staleWhileHidden = false;
+      requestRefresh();
+    }
+  });
 
   if (window.EventSource) {
     var source = new EventSource(api("/api/events?ui=1"));
     source.onopen = function () { connection.textContent = "自動更新中"; };
     source.onerror = function () { connection.textContent = "更新通知へ再接続しています…"; };
-    source.onmessage = function () {
-      clearTimeout(refreshTimer);
-      refreshTimer = setTimeout(function () { loadGuide(true); loadStatus(); }, 300);
-    };
+    source.onmessage = requestRefresh;
   }
-  setInterval(function () { loadGuide(true); }, 60000);
+  setInterval(requestRefresh, 60000);
 }());

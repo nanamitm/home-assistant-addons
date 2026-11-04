@@ -141,3 +141,106 @@ test('drops stored values it does not recognise', () => {
   // select の値は文字列なので、数の 3 は受け付けない。
   assert.equal(sanitizeFilters({ zoom: 3 }).zoom, '2')
 })
+
+// ---- createRefreshScheduler ----
+const { createRefreshScheduler } = require('../app/static/guide-layout.js')
+
+function fakeClock() {
+  let time = 0
+  let nextId = 1
+  const timers = new Map()
+  return {
+    now: () => time,
+    setTimeout: (fn, ms) => { const id = nextId++; timers.set(id, { fn, at: time + ms }); return id },
+    clearTimeout: (id) => { timers.delete(id) },
+    pending: () => timers.size,
+    async advance(ms) {
+      const until = time + ms
+      for (;;) {
+        let next = null
+        for (const [id, t] of timers) if (t.at <= until && (!next || t.at < next[1].at)) next = [id, t]
+        if (!next) break
+        timers.delete(next[0])
+        time = next[1].at
+        next[1].fn()
+        await flush()
+      }
+      time = until
+      await flush()
+    },
+  }
+}
+const flush = () => new Promise((resolve) => setImmediate(resolve))
+
+function deferredRun() {
+  const calls = []
+  const run = (immediate) => new Promise((resolve) => calls.push({ immediate, resolve }))
+  return { calls, run }
+}
+
+test('collapses a burst of update notices into one refresh', async () => {
+  const clock = fakeClock()
+  const { calls, run } = deferredRun()
+  const s = createRefreshScheduler(run, { minInterval: 30000, delay: 300, ...clock })
+  for (let i = 0; i < 50; i++) s.request()
+  await clock.advance(300)
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].immediate, false)
+})
+
+test('does not start another refresh while one is still loading', async () => {
+  const clock = fakeClock()
+  const { calls, run } = deferredRun()
+  const s = createRefreshScheduler(run, { minInterval: 30000, delay: 300, ...clock })
+  s.request()
+  await clock.advance(300)
+  for (let i = 0; i < 100; i++) { s.request(); await clock.advance(1000) }
+  assert.equal(calls.length, 1, 'still waiting for the first response')
+  calls[0].resolve()
+  await flush()
+  await clock.advance(300)
+  assert.equal(calls.length, 2, 'one follow-up refresh for everything that arrived meanwhile')
+})
+
+test('keeps at least minInterval between refresh starts even under constant notices', async () => {
+  const clock = fakeClock()
+  const starts = []
+  const s = createRefreshScheduler(() => { starts.push(clock.now()); return Promise.resolve() },
+    { minInterval: 30000, delay: 300, ...clock })
+  for (let i = 0; i < 120; i++) { s.request(); await clock.advance(500) }
+  assert.ok(starts.length >= 2, 'notices that never stop must not starve the refresh')
+  for (let i = 1; i < starts.length; i++) assert.ok(starts[i] - starts[i - 1] >= 30000)
+})
+
+test('a user action loads at once and supersedes the background refresh', async () => {
+  const clock = fakeClock()
+  const { calls, run } = deferredRun()
+  const s = createRefreshScheduler(run, { minInterval: 30000, delay: 300, ...clock })
+  s.request()
+  await clock.advance(300)
+  s.now()
+  await flush()
+  assert.equal(calls.length, 2)
+  assert.equal(calls[1].immediate, true)
+  s.request()
+  calls[0].resolve() // the superseded load finishing must not release the new one
+  await flush()
+  await clock.advance(60000)
+  assert.equal(calls.length, 2)
+  calls[1].resolve()
+  await flush()
+  await clock.advance(30000)
+  assert.equal(calls.length, 3)
+})
+
+test('a failed refresh does not stop later ones', async () => {
+  const clock = fakeClock()
+  let count = 0
+  const s = createRefreshScheduler(() => { count++; return Promise.reject(new Error('HTTP 502')) },
+    { minInterval: 1000, delay: 0, ...clock })
+  s.request()
+  await clock.advance(0)
+  s.request()
+  await clock.advance(1000)
+  assert.equal(count, 2)
+})

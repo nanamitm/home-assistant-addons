@@ -123,7 +123,71 @@
     });
   }
 
+  // 再取得を間引く。run() は Promise を返す取得処理。
+  // - request(): 更新通知などの「そのうち取り直したい」要求。取得中なら完了後に
+  //   1 回だけ、そうでなければ前回の開始から minInterval 以上空けて 1 回だけ走らせる。
+  //   要求が続いても期限は先送りしないので、通知が途切れなくても定期的に更新される。
+  // - now(): 日付変更などの利用者操作。待たずにすぐ走らせる(前の取得の中断は run 側)。
+  function createRefreshScheduler(run, options) {
+    options = options || {};
+    var minInterval = options.minInterval == null ? 30000 : options.minInterval;
+    var delayMin = options.delay == null ? 300 : options.delay;
+    var setTimer = options.setTimeout || setTimeout;
+    var clearTimer = options.clearTimeout || clearTimeout;
+    var now = options.now || Date.now;
+    var timer = null;
+    var running = false;
+    var pending = false;
+    var lastStart = -Infinity;
+    var generation = 0;
+
+    function clearScheduled() {
+      if (timer !== null) clearTimer(timer);
+      timer = null;
+    }
+
+    function start(immediate) {
+      clearScheduled();
+      pending = false;
+      running = true;
+      lastStart = now();
+      var id = ++generation;
+      function finished() {
+        if (id !== generation) return; // now() で置き換えられた古い取得
+        running = false;
+        if (pending) request();
+      }
+      var result;
+      try {
+        result = Promise.resolve(run(immediate));
+      } catch (error) {
+        result = Promise.reject(error);
+      }
+      result.then(finished, finished);
+    }
+
+    function request() {
+      if (running) {
+        pending = true;
+        return;
+      }
+      if (timer !== null) return;
+      var wait = Math.max(delayMin, lastStart + minInterval - now());
+      timer = setTimer(function () {
+        timer = null;
+        start(false);
+      }, wait);
+    }
+
+    return {
+      request: request,
+      now: function () { start(true); },
+      isBusy: function () { return running || timer !== null; }
+    };
+  }
+
   return {
+    createRefreshScheduler: createRefreshScheduler,
     variableTimeline: variableTimeline,
     pixelAt: pixelAt,
     filterServices: filterServices,
