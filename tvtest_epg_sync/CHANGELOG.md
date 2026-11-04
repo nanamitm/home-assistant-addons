@@ -1,3 +1,14 @@
+## 1.4.5
+
+- Stop the guide page from piling up reloads while EPG data is arriving.
+  It used to fetch the whole guide again for every update notice, often
+  several a second, although one fetch takes seconds and megabytes, so
+  unfinished fetches stacked up (and showed as cancelled requests in a
+  Cloudflare tunnel's log). Notices now lead to at most one reload every
+  30 seconds, never while the previous one is still loading; changing the
+  date still loads at once and drops the fetch it replaces. A guide in a
+  hidden tab is not reloaded until it is shown again.
+
 ## 1.4.4
 
 - Honor `If-None-Match: *` on service uploads, so an instance creating a
